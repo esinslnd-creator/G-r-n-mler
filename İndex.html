@@ -1,0 +1,2415 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3B Küp Atölyesi Pro | Cisimlerin Farklı Yönlerden Görünümleri (7. Sınıf)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js (3B Motor) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Google Fonts: Inter & Fredoka -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Fredoka', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+            background-color: #f1f5f9;
+        }
+        /* Three.js Sahne Kapsayıcı Garantisi - Asla 0px olmaz */
+        #canvas-wrapper {
+            position: relative;
+            width: 100%;
+            min-height: 460px;
+            height: 100%;
+            display: block;
+            overflow: hidden;
+        }
+        canvas#three-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+            outline: none;
+            cursor: grab;
+        }
+        canvas#three-canvas:active {
+            cursor: grabbing;
+        }
+        .tab-active {
+            background-color: #4f46e5;
+            color: white;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.28);
+        }
+        .grid-cell-filled {
+            background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
+            border-color: #1e1b4b;
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.3);
+        }
+        .grid-cell-empty {
+            background-color: #f8fafc;
+            border-color: #cbd5e1;
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.94); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop {
+            animation: popIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .smart-btn {
+            min-height: 46px;
+        }
+        ::-webkit-scrollbar { height: 6px; width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col overflow-x-hidden">
+
+    <!-- AKILLI TAHTA ŞEFFAF EKRAN KALEMİ KATMANI (ANNOTATION OVERLAY) -->
+    <canvas id="annotation-canvas" class="fixed inset-0 z-40 pointer-events-none hidden"></canvas>
+
+    <!-- YÜZEN TAHTA KALEMİ ARAÇ ÇUBUĞU -->
+    <div id="annotation-toolbar" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-2.5 animate-pop">
+        <span class="text-xs font-bold uppercase tracking-wider text-amber-400 mr-1 flex items-center gap-1">
+            <span>✏️</span> Tahta Kalemi
+        </span>
+        <button onclick="setPenColor('#ef4444')" id="pen-color-red" class="w-9 h-9 rounded-full bg-red-500 ring-4 ring-white transition" title="Kırmızı Kalem"></button>
+        <button onclick="setPenColor('#3b82f6')" id="pen-color-blue" class="w-9 h-9 rounded-full bg-blue-500 opacity-75 hover:opacity-100 transition" title="Mavi Kalem"></button>
+        <button onclick="setPenColor('#10b981')" id="pen-color-green" class="w-9 h-9 rounded-full bg-emerald-500 opacity-75 hover:opacity-100 transition" title="Yeşil Kalem"></button>
+        <button onclick="setPenColor('#facc15')" id="pen-color-yellow" class="w-9 h-9 rounded-full bg-yellow-400 opacity-75 hover:opacity-100 transition" title="Sarı Fosforlu"></button>
+        <div class="w-px h-7 bg-slate-700 mx-1"></div>
+        <button onclick="setPenEraser()" id="pen-eraser-btn" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold flex items-center gap-1 transition">
+            <span>🧽</span> Silgi
+        </button>
+        <button onclick="clearAnnotationCanvas()" class="px-3 py-2 rounded-xl bg-rose-600/90 hover:bg-rose-600 text-xs font-bold flex items-center gap-1 transition">
+            <span>🗑️</span> Temizle
+        </button>
+        <button onclick="toggleAnnotationMode()" class="px-3 py-2 rounded-xl bg-white text-slate-900 hover:bg-slate-200 text-xs font-bold transition">
+            ✖ Kapat
+        </button>
+    </div>
+
+    <!-- ÜST GEZİNME ÇUBUĞU (AKILLI TAHTA OPTİMİZE) -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+        <div class="max-w-[1600px] mx-auto px-3 sm:px-5 py-2 flex flex-wrap items-center justify-between gap-2">
+            <!-- Logo -->
+            <div class="flex items-center gap-2.5">
+                <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shrink-0">
+                    <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-display font-bold text-base sm:text-xl text-slate-900 leading-tight">3B Küp Atölyesi Pro</h1>
+                    <p class="text-[11px] sm:text-xs text-slate-500 font-medium hidden md:block">7. Sınıf Matematik • M.7.3.3.1 & M.7.3.3.2 Akıllı Tahta Sürümü</p>
+                </div>
+            </div>
+
+            <!-- 6 Modüllü Sekme Menüsü -->
+            <nav class="flex items-center bg-slate-100 p-1.5 rounded-xl gap-1 overflow-x-auto max-w-full order-3 xl:order-2 w-full xl:w-auto">
+                <button onclick="switchMode('explore')" id="nav-explore" class="tab-active smart-btn px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap">
+                    <span>🧊</span> 1. Keşif & İnşa
+                </button>
+                <button onclick="switchMode('hunter')" id="nav-hunter" class="text-slate-600 hover:text-slate-900 smart-btn px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap">
+                    <span>🎯</span> 2. Görünüm Avcısı
+                </button>
+                <button onclick="switchMode('architect')" id="nav-architect" class="text-slate-600 hover:text-slate-900 smart-btn px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap">
+                    <span>🏗️</span> 3. Mimar (12)
+                </button>
+                <button onclick="switchMode('detective')" id="nav-detective" class="text-slate-600 hover:text-slate-900 smart-btn px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap">
+                    <span>🕵️</span> 4. Dedektif
+                </button>
+                <button onclick="switchMode('matpuzzle')" id="nav-matpuzzle" class="text-slate-600 hover:text-slate-900 smart-btn px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap">
+                    <span>🔢</span> 5. Kat Planı
+                </button>
+                <button onclick="switchMode('quiz')" id="nav-quiz" class="text-slate-600 hover:text-slate-900 smart-btn px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap">
+                    <span>📝</span> 6. Kazanım Testi
+                </button>
+            </nav>
+
+            <!-- Sağ Akıllı Tahta Araçları: Puan, Takım Skoru, Tahta Kalemi, Ses, Tam Ekran -->
+            <div class="flex items-center gap-1.5 sm:gap-2 order-2 xl:order-3">
+                <div class="bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl flex items-center gap-1.5" title="Bireysel Puan">
+                    <span class="text-base">⭐</span>
+                    <span id="global-score" class="font-display font-bold text-amber-700 text-sm sm:text-base">0</span>
+                </div>
+
+                <button onclick="toggleTeamBoard()" id="team-board-btn" title="Sınıf Yarışması Takım Skoru" class="smart-btn px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold text-xs sm:text-sm flex items-center gap-1.5 transition">
+                    <span>🏆</span> <span class="hidden sm:inline">Takım Skoru</span>
+                </button>
+
+                <button onclick="toggleAnnotationMode()" id="pen-toggle-btn" title="Ekran Üzerine Kalemle Çiz" class="smart-btn px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-xs sm:text-sm flex items-center gap-1.5 transition">
+                    <span>✏️</span> <span class="hidden sm:inline">Tahta Kalemi</span>
+                </button>
+
+                <button onclick="toggleSound()" id="sound-btn" title="Sesi Aç/Kapat" class="smart-btn px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm flex items-center gap-1 transition">
+                    <span id="sound-emoji" class="text-base">🔊</span>
+                    <span id="sound-label" class="hidden md:inline">Ses Açık</span>
+                </button>
+
+                <button onclick="toggleFullScreen()" id="fullscreen-btn" title="Tam Ekran Modu" class="smart-btn px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-xs transition">
+                    <span id="fs-icon">⛶</span>
+                    <span id="fs-label" class="hidden sm:inline">Tam Ekran</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- AÇILIR SINIF YARIŞMASI / TAKIM SKOR TABLOSU -->
+        <div id="team-scoreboard-bar" class="hidden bg-slate-900 text-white border-t border-slate-700 px-4 py-2.5 animate-pop">
+            <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">🏆</span>
+                    <span class="font-display font-bold text-sm sm:text-base text-amber-400">Sınıf İçi Takım Yarışması</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-4 sm:gap-6">
+                    <div class="flex items-center gap-2 bg-rose-950/80 border border-rose-500/40 px-3 py-1.5 rounded-xl">
+                        <span class="font-bold text-xs sm:text-sm text-rose-300">🔴 A Takımı:</span>
+                        <span id="team-a-score" class="font-display font-bold text-lg sm:text-xl text-white min-w-[28px] text-center">0</span>
+                        <button onclick="updateTeamScore('A', 10)" class="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 font-bold text-xs">+10</button>
+                        <button onclick="updateTeamScore('A', -5)" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 font-bold text-xs">-5</button>
+                    </div>
+                    <div class="flex items-center gap-2 bg-sky-950/80 border border-sky-500/40 px-3 py-1.5 rounded-xl">
+                        <span class="font-bold text-xs sm:text-sm text-sky-300">🔵 B Takımı:</span>
+                        <span id="team-b-score" class="font-display font-bold text-lg sm:text-xl text-white min-w-[28px] text-center">0</span>
+                        <button onclick="updateTeamScore('B', 10)" class="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 font-bold text-xs">+10</button>
+                        <button onclick="updateTeamScore('B', -5)" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 font-bold text-xs">-5</button>
+                    </div>
+                    <button onclick="resetTeamScores()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">
+                        ↺ Skorları Sıfırla
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ANA İÇERİK ALANI -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-4 flex flex-col">
+
+        <!-- Toast Bildirim Kutusu -->
+        <div id="toast-banner" class="hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl font-semibold text-sm sm:text-base text-white flex items-center gap-2 transition-all">
+            <span id="toast-icon">✨</span>
+            <span id="toast-text">Mesaj</span>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- MODÜL 1 - 5 ORTAK 3B SAHNE + DİNAMİK SAĞ PANEL YAPISI     -->
+        <!-- ========================================================= -->
+        <div id="workspace-container" class="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1">
+            
+            <!-- SOL ALAN: 3B İNTERAKTİF SAHNE (7 Sütun) -->
+            <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden relative min-h-[500px] sm:min-h-[560px]">
+                
+                <!-- Hızlı Kamera Bakış Çubuğu -->
+                <div class="p-2.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-1.5 bg-slate-50/90 z-10">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-400 mr-1">Bakış:</span>
+                        <button onclick="setCameraPreset('iso')" class="min-h-[40px] px-3 py-1.5 rounded-xl bg-white border border-slate-300 hover:border-indigo-500 text-xs sm:text-sm font-bold text-slate-800 transition">3B</button>
+                        <button onclick="setCameraPreset('front')" class="min-h-[40px] px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-300 hover:bg-rose-100 text-xs sm:text-sm font-bold text-rose-700 transition">Önden</button>
+                        <button onclick="setCameraPreset('right')" class="min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 text-xs sm:text-sm font-bold text-emerald-700 transition">Sağdan</button>
+                        <button onclick="setCameraPreset('left')" class="min-h-[40px] px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-300 hover:bg-amber-100 text-xs sm:text-sm font-bold text-amber-700 transition">Soldan</button>
+                        <button onclick="setCameraPreset('back')" class="min-h-[40px] px-3 py-1.5 rounded-xl bg-purple-50 border border-purple-300 hover:bg-purple-100 text-xs sm:text-sm font-bold text-purple-700 transition">Arkadan</button>
+                        <button onclick="setCameraPreset('top')" class="min-h-[40px] px-3 py-1.5 rounded-xl bg-sky-50 border border-sky-300 hover:bg-sky-100 text-xs sm:text-sm font-bold text-sky-700 transition">Üstten</button>
+                    </div>
+                    <div class="text-xs text-slate-500 font-semibold hidden md:block">
+                        👆 Kalem/Parmakla Sürükle: 360° Döndür
+                    </div>
+                </div>
+
+                <!-- 3B Canvas Alanı (Garantili Minimum Yükseklik ve ResizeObserver Destekli) -->
+                <div id="canvas-wrapper" class="flex-1 w-full bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200">
+                    <canvas id="three-canvas"></canvas>
+
+                    <!-- Yön Pusulası Göstergesi (Sol Alt) -->
+                    <div class="absolute bottom-3 left-3 z-10 bg-white/95 backdrop-blur-xs border border-slate-200 rounded-xl p-2.5 shadow-xs pointer-events-none text-xs space-y-1">
+                        <div class="font-bold text-slate-700 border-b border-slate-100 pb-0.5 mb-0.5">Bakış Yönleri</div>
+                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> <span class="font-bold text-rose-700">ÖN</span> (Kırmızı)</div>
+                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> <span class="font-bold text-emerald-700">SAĞ</span> (Yeşil)</div>
+                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> <span class="font-bold text-amber-700">SOL</span> (Sarı)</div>
+                        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span> <span class="font-bold text-purple-700">ARKA</span> (Mor)</div>
+                    </div>
+
+                    <!-- Akıllı Tahta Dokunmatik İnşa İpucu Rozeti -->
+                    <div id="build-hint-badge" class="hidden absolute top-3 left-1/2 -translate-x-1/2 z-10 bg-indigo-600/95 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-full shadow-md pointer-events-none whitespace-nowrap">
+                        Alttaki Modu Seçerek Tabana veya Küplere Dokun!
+                    </div>
+
+                    <!-- Sağ Tık Gerektirmeyen Büyük Dokunmatik Küp Ekle / Sil Araçları -->
+                    <div id="builder-toolbar" class="hidden absolute bottom-3 right-3 z-10 flex items-center gap-2 bg-white/95 backdrop-blur-xs p-2 rounded-2xl border-2 border-slate-200 shadow-lg">
+                        <button onclick="setBuildTool('add')" id="tool-add" class="min-h-[48px] px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 transition">
+                            <span>➕</span> Küp Ekle
+                        </button>
+                        <button onclick="setBuildTool('remove')" id="tool-remove" class="min-h-[48px] px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-rose-100 hover:text-rose-700 text-xs sm:text-sm font-bold flex items-center gap-1.5 transition">
+                            <span>➖</span> Küp Sil
+                        </button>
+                        <button onclick="clearGrid()" class="min-h-[48px] px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs sm:text-sm font-bold transition" title="Tümünü Temizle">
+                            🗑️ Sıfırla
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SAĞ ALAN: MODÜL PANELLERİ (5 Sütun) -->
+            <div class="lg:col-span-5 flex flex-col gap-3">
+
+                <!-- =============================================== -->
+                <!-- MODÜL 1: 3B KEŞİF & SERBEST İNŞA ATÖLYESİ       -->
+                <!-- =============================================== -->
+                <div id="panel-explore" class="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 flex flex-col gap-3.5 animate-pop">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="font-display font-bold text-lg sm:text-xl text-slate-900">1. Keşif & Serbest İnşa Atölyesi</h2>
+                            <p class="text-xs sm:text-sm text-slate-500">10 hazır modelden birini seç veya kendi yapını inşa et.</p>
+                        </div>
+                        <span id="cube-count-badge" class="bg-indigo-50 text-indigo-700 text-xs sm:text-sm font-bold px-3 py-1.5 rounded-xl border border-indigo-100 shrink-0">0 Küp</span>
+                    </div>
+
+                    <!-- 10 Hazır Yapı + Kendin Yap -->
+                    <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        <button onclick="loadPreset('stairs')" class="min-h-[44px] p-2 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-xs sm:text-sm font-semibold text-slate-700 transition">🪜 Merdiven</button>
+                        <button onclick="loadPreset('lblock')" class="min-h-[44px] p-2 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-xs sm:text-sm font-semibold text-slate-700 transition">📐 L-Blok</button>
+                        <button onclick="loadPreset('ublock')" class="min-h-[44px] p-2 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-xs sm:text-sm font-semibold text-slate-700 transition">🧲 U-Blok</button>
+                        <button onclick="loadPreset('arch')" class="min-h-[44px] p-2 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-xs sm:text-sm font-semibold text-slate-700 transition">🌉 Kemer</button>
+                        <button onclick="loadPreset('pyramid')" class="min-h-[44px] p-2 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-xs sm:text-sm font-semibold text-slate-700 transition">🔺 Piramit</button>
+                        <button onclick="loadPreset('bridge')" class="min-h-[44px] p-2 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-xs sm:text-sm font-semibold text-slate-700 transition">🛤️ Köprü</button>
+                        <button onclick="loadPreset('tblock')" class="min-h-[44px] p-2 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-xs sm:text-sm font-semibold text-slate-700 transition">🏛️ T-Blok</button>
+                        <button onclick="loadPreset('zblock')" class="min-h-[44px] p-2 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-xs sm:text-sm font-semibold text-slate-700 transition">⚡ Z-Blok</button>
+                        <button onclick="loadPreset('castle')" class="min-h-[44px] p-2 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-xs sm:text-sm font-semibold text-slate-700 transition">🏰 Kale</button>
+                        <button onclick="loadPreset('diagstep')" class="min-h-[44px] p-2 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-xs sm:text-sm font-semibold text-slate-700 transition">📶 Çapraz</button>
+                        <button onclick="enableCustomBuild()" class="col-span-2 min-h-[44px] p-2 rounded-xl border-2 border-dashed border-indigo-400 bg-indigo-50/70 hover:bg-indigo-100 text-xs sm:text-sm font-bold text-indigo-700 transition">✏️ Kendin Yap (İnşa Et)</button>
+                    </div>
+
+                    <hr class="border-slate-100">
+
+                    <!-- Canlı 2B Projeksiyon Paneli + Mat Sayısal Kat Planı Toggle -->
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="font-display font-bold text-sm text-slate-800">Canlı 2B Görünümler (Tıkla & Döndür)</h3>
+                            <label class="flex items-center gap-1.5 cursor-pointer bg-sky-50 border border-sky-200 px-2.5 py-1 rounded-lg text-[11px] font-bold text-sky-800 select-none">
+                                <input type="checkbox" id="toggle-mat-numbers" onchange="updateAll2DPreviews()" checked class="accent-sky-600 rounded">
+                                <span>Mat Sayıları (Üst)</span>
+                            </label>
+                        </div>
+                        
+                        <div class="grid grid-cols-3 gap-2">
+                            <div onclick="setCameraPreset('front')" class="cursor-pointer group bg-rose-50/60 hover:bg-rose-50 border border-rose-200 rounded-xl p-2 flex flex-col items-center transition">
+                                <span class="text-[11px] font-bold text-rose-700 mb-1 group-hover:underline">ÖNDEN</span>
+                                <div id="live-view-front" class="grid grid-cols-4 gap-0.5 w-20 h-20 bg-white p-1 rounded-lg border border-rose-200"></div>
+                            </div>
+                            <div onclick="setCameraPreset('right')" class="cursor-pointer group bg-emerald-50/60 hover:bg-emerald-50 border border-emerald-200 rounded-xl p-2 flex flex-col items-center transition">
+                                <span class="text-[11px] font-bold text-emerald-700 mb-1 group-hover:underline">SAĞDAN</span>
+                                <div id="live-view-right" class="grid grid-cols-4 gap-0.5 w-20 h-20 bg-white p-1 rounded-lg border border-emerald-200"></div>
+                            </div>
+                            <div onclick="setCameraPreset('top')" class="cursor-pointer group bg-sky-50/60 hover:bg-sky-50 border border-sky-200 rounded-xl p-2 flex flex-col items-center transition">
+                                <span class="text-[11px] font-bold text-sky-700 mb-1 group-hover:underline">ÜSTTEN (MAT)</span>
+                                <div id="live-view-top" class="grid grid-cols-4 gap-0.5 w-20 h-20 bg-white p-1 rounded-lg border border-sky-200"></div>
+                            </div>
+                            <div onclick="setCameraPreset('left')" class="cursor-pointer group bg-amber-50/60 hover:bg-amber-50 border border-amber-200 rounded-xl p-2 flex flex-col items-center transition">
+                                <span class="text-[11px] font-bold text-amber-700 mb-1 group-hover:underline">SOLDAN</span>
+                                <div id="live-view-left" class="grid grid-cols-4 gap-0.5 w-20 h-20 bg-white p-1 rounded-lg border border-amber-200"></div>
+                            </div>
+                            <div onclick="setCameraPreset('back')" class="cursor-pointer group bg-purple-50/60 hover:bg-purple-50 border border-purple-200 rounded-xl p-2 flex flex-col items-center transition">
+                                <span class="text-[11px] font-bold text-purple-700 mb-1 group-hover:underline">ARKADAN</span>
+                                <div id="live-view-back" class="grid grid-cols-4 gap-0.5 w-20 h-20 bg-white p-1 rounded-lg border border-purple-200"></div>
+                            </div>
+                            <div class="bg-slate-50 border border-slate-200 rounded-xl p-2 flex flex-col justify-center text-[10px] text-slate-600 leading-snug">
+                                <span class="font-bold text-slate-800 mb-0.5">💡 Mat Kodu Nedir?</span>
+                                Üstten görünümdeki sayılar, o sütunda üst üste kaç küp olduğunu gösterir.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- =============================================== -->
+                <!-- MODÜL 2: GÖRÜNÜM AVCISI (3 ZORLUK SEVİYESİ)     -->
+                <!-- =============================================== -->
+                <div id="panel-hunter" class="hidden bg-white rounded-2xl border border-slate-200 shadow-xs p-4 flex flex-col gap-3 animate-pop">
+                    <div class="flex items-center justify-between gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                        <span class="text-xs font-bold text-slate-600">Zorluk:</span>
+                        <div class="flex gap-1">
+                            <button onclick="setHunterDifficulty('easy')" id="diff-easy" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white transition">Kolay (3x3)</button>
+                            <button onclick="setHunterDifficulty('medium')" id="diff-medium" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-600 border border-slate-200 transition">Orta (4x4)</button>
+                            <button onclick="setHunterDifficulty('hard')" id="diff-hard" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-600 border border-slate-200 transition">Zor (Karmaşık)</button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between bg-indigo-50 p-2.5 rounded-xl border border-indigo-100">
+                        <div>
+                            <span class="text-[11px] font-bold text-indigo-500 uppercase">Soru <span id="hunter-q-num">1</span>/10</span>
+                            <h2 class="font-display font-bold text-base text-slate-900">Görünüm Avcısı</h2>
+                        </div>
+                        <div class="flex items-center gap-2.5">
+                            <div class="text-center">
+                                <div class="text-[10px] font-bold text-slate-400">SERİ</div>
+                                <div id="hunter-streak" class="font-display font-bold text-amber-600 text-sm">x1</div>
+                            </div>
+                            <div class="text-center bg-white px-2.5 py-1 rounded-lg border border-indigo-200">
+                                <div class="text-[10px] font-bold text-slate-400">SÜRE</div>
+                                <div id="hunter-timer" class="font-display font-bold text-indigo-700 text-sm">30s</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-900 text-white p-3 rounded-xl text-center">
+                        <p class="text-xs sm:text-sm font-medium">
+                            Bu 3B yapının <span id="hunter-target-dir" class="px-2 py-0.5 rounded-md font-display font-bold text-sm bg-rose-500 text-white mx-1">ÖNDEN</span> görünümü hangisidir?
+                        </p>
+                    </div>
+
+                    <div id="hunter-options" class="grid grid-cols-2 gap-2.5"></div>
+
+                    <div id="hunter-feedback" class="hidden p-3 rounded-xl border text-xs font-medium flex flex-col gap-2">
+                        <div id="hunter-feedback-text"></div>
+                        <button onclick="nextHunterQuestion()" class="min-h-[44px] w-full py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm shadow-xs transition">
+                            Sonraki Soru ➔
+                        </button>
+                    </div>
+                </div>
+
+                <!-- =============================================== -->
+                <!-- MODÜL 3: MİMAR MÜCADELESİ (12 SEVİYE + BONUS)   -->
+                <!-- =============================================== -->
+                <div id="panel-architect" class="hidden bg-white rounded-2xl border border-slate-200 shadow-xs p-4 flex flex-col gap-3 animate-pop">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold text-emerald-600 uppercase">Seviye <span id="arch-level">1</span> / 12</span>
+                                <span id="arch-constraint-badge" class="hidden px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">Bonus Görev</span>
+                            </div>
+                            <h2 class="font-display font-bold text-base sm:text-lg text-slate-900">Mimar Mücadelesi</h2>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <button onclick="showArchitectHint()" class="min-h-[40px] text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-lg transition" title="Eksik/Fazla İpucu">
+                                💡 İpucu
+                            </button>
+                            <button onclick="loadArchitectLevel(archState.level)" class="min-h-[40px] text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition">
+                                ↺ Sıfırla
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="arch-level-dots" class="flex items-center gap-1 overflow-x-auto pb-1"></div>
+
+                    <div id="arch-mission-box" class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-700 leading-relaxed">
+                        Aşağıdaki <strong>Önden, Sağdan ve Üstten</strong> görünümlere uygun yapıyı 3B platforma inşa et!
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                        <div class="flex flex-col items-center">
+                            <span class="text-[11px] font-bold text-rose-700 mb-1">HEDEF ÖN</span>
+                            <div id="arch-target-front" class="grid grid-cols-4 gap-0.5 w-18 h-18 sm:w-20 sm:h-20 bg-white p-1 rounded-lg border-2 border-rose-300"></div>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-[11px] font-bold text-emerald-700 mb-1">HEDEF SAĞ</span>
+                            <div id="arch-target-right" class="grid grid-cols-4 gap-0.5 w-18 h-18 sm:w-20 sm:h-20 bg-white p-1 rounded-lg border-2 border-emerald-300"></div>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-[11px] font-bold text-sky-700 mb-1">HEDEF ÜST</span>
+                            <div id="arch-target-top" class="grid grid-cols-4 gap-0.5 w-18 h-18 sm:w-20 sm:h-20 bg-white p-1 rounded-lg border-2 border-sky-300"></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between text-[11px] font-bold text-slate-500 mb-1">
+                            <span>Senin Yapının Anlık Görünümleri:</span>
+                            <span id="arch-user-cube-count" class="text-indigo-600">Kullanılan: 0 Küp</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="flex flex-col items-center bg-white p-1.5 rounded-xl border border-slate-200">
+                                <span id="arch-status-front" class="text-[11px] font-bold text-slate-600 mb-1">Ön ⏳</span>
+                                <div id="arch-user-front" class="grid grid-cols-4 gap-0.5 w-14 h-14 bg-slate-50 p-0.5 rounded border border-slate-200"></div>
+                            </div>
+                            <div class="flex flex-col items-center bg-white p-1.5 rounded-xl border border-slate-200">
+                                <span id="arch-status-right" class="text-[11px] font-bold text-slate-600 mb-1">Sağ ⏳</span>
+                                <div id="arch-user-right" class="grid grid-cols-4 gap-0.5 w-14 h-14 bg-slate-50 p-0.5 rounded border border-slate-200"></div>
+                            </div>
+                            <div class="flex flex-col items-center bg-white p-1.5 rounded-xl border border-slate-200">
+                                <span id="arch-status-top" class="text-[11px] font-bold text-slate-600 mb-1">Üst ⏳</span>
+                                <div id="arch-user-top" class="grid grid-cols-4 gap-0.5 w-14 h-14 bg-slate-50 p-0.5 rounded border border-slate-200"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button onclick="checkArchitectSolution()" class="min-h-[48px] w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-display font-bold text-sm sm:text-base shadow-sm transition">
+                        ✅ Yapıyı Kontrol Et
+                    </button>
+
+                    <div id="arch-feedback" class="hidden p-3 rounded-xl text-xs font-semibold leading-relaxed"></div>
+                </div>
+
+                <!-- =============================================== -->
+                <!-- MODÜL 4: DEDEKTİF MODU ("HANGİ YÖNDEN BAKILDI?") -->
+                <!-- =============================================== -->
+                <div id="panel-detective" class="hidden bg-white rounded-2xl border border-slate-200 shadow-xs p-4 flex flex-col gap-3.5 animate-pop">
+                    <div class="flex items-center justify-between bg-purple-50 p-3 rounded-xl border border-purple-100">
+                        <div>
+                            <span class="text-[11px] font-bold text-purple-600 uppercase">Vaka <span id="det-q-num">1</span> / 10</span>
+                            <h2 class="font-display font-bold text-base sm:text-lg text-slate-900">Dedektif Modu</h2>
+                        </div>
+                        <span class="bg-white border border-purple-200 text-purple-700 text-xs font-bold px-2.5 py-1 rounded-lg">Tersine Bakış</span>
+                    </div>
+
+                    <p class="text-xs text-slate-600 leading-relaxed">
+                        Aşağıda verilen 2B görünüm kartı, soldaki 3B yapıya <strong>hangi yönden</strong> bakılarak elde edilmiştir? (3B modeli döndürerek inceleyebilirsin!)
+                    </p>
+
+                    <div class="bg-slate-900 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 shadow-inner">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Elde Edilen 2B Görünüm</span>
+                        <div id="det-clue-grid" class="grid grid-cols-4 gap-1 w-28 h-28 bg-white p-2 rounded-xl shadow-md"></div>
+                    </div>
+
+                    <div id="det-options" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <button onclick="checkDetectiveGuess('front', this)" class="det-btn min-h-[46px] py-2.5 px-3 rounded-xl border-2 border-rose-200 bg-rose-50/60 hover:bg-rose-100 text-rose-800 font-bold text-xs sm:text-sm transition">🔴 Önden</button>
+                        <button onclick="checkDetectiveGuess('right', this)" class="det-btn min-h-[46px] py-2.5 px-3 rounded-xl border-2 border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100 text-emerald-800 font-bold text-xs sm:text-sm transition">🟢 Sağdan</button>
+                        <button onclick="checkDetectiveGuess('left', this)" class="det-btn min-h-[46px] py-2.5 px-3 rounded-xl border-2 border-amber-200 bg-amber-50/60 hover:bg-amber-100 text-amber-800 font-bold text-xs sm:text-sm transition">🟡 Soldan</button>
+                        <button onclick="checkDetectiveGuess('back', this)" class="det-btn min-h-[46px] py-2.5 px-3 rounded-xl border-2 border-purple-200 bg-purple-50/60 hover:bg-purple-100 text-purple-800 font-bold text-xs sm:text-sm transition">🟣 Arkadan</button>
+                        <button onclick="checkDetectiveGuess('top', this)" class="det-btn min-h-[46px] py-2.5 px-3 rounded-xl border-2 border-sky-200 bg-sky-50/60 hover:bg-sky-100 text-sky-800 font-bold text-xs sm:text-sm transition col-span-2 sm:col-span-2">🔵 Üstten (Kuş Bakışı)</button>
+                    </div>
+
+                    <div id="det-feedback" class="hidden p-3 rounded-xl border text-xs font-medium flex flex-col gap-2">
+                        <div id="det-feedback-text"></div>
+                        <button onclick="nextDetectiveCase()" class="min-h-[44px] w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs sm:text-sm transition">
+                            Sonraki Vaka ➔
+                        </button>
+                    </div>
+                </div>
+
+                <!-- =============================================== -->
+                <!-- MODÜL 5: GÖLGE & KAT PLANI BULMACASI            -->
+                <!-- =============================================== -->
+                <div id="panel-matpuzzle" class="hidden bg-white rounded-2xl border border-slate-200 shadow-xs p-4 flex flex-col gap-3.5 animate-pop">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="font-display font-bold text-base sm:text-lg text-slate-900">5. Kat Planı & Çizim Bulmacası</h2>
+                            <p class="text-xs text-slate-500">İki yönlü mat kodu ve 2B boyama etkinlikleri</p>
+                        </div>
+                        <span class="bg-sky-50 text-sky-700 border border-sky-200 text-xs font-bold px-2.5 py-1 rounded-lg">Tur <span id="mat-round">1</span></span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl">
+                        <button onclick="setMatSubMode('write_mat')" id="mat-sub-a" class="min-h-[40px] py-1.5 px-2 rounded-lg bg-white text-indigo-700 font-bold text-xs shadow-xs transition">
+                            A) Kat Planı Sayılarını Yaz
+                        </button>
+                        <button onclick="setMatSubMode('draw_view')" id="mat-sub-b" class="min-h-[40px] py-1.5 px-2 rounded-lg text-slate-600 font-semibold text-xs transition">
+                            B) Mat Kodundan Görünüm Çiz
+                        </button>
+                    </div>
+
+                    <!-- ETKİNLİK A -->
+                    <div id="mat-mode-a" class="flex flex-col gap-3">
+                        <div class="bg-sky-50 border border-sky-200 rounded-xl p-2.5 text-xs sm:text-sm text-sky-900 leading-relaxed">
+                            Soldaki 3B yapının <strong>Üstten Görünüm</strong> tablosundaki her kareye dokunarak o sütundaki küp yüksekliğini (<strong>0, 1, 2, 3, 4</strong>) ayarla!
+                        </div>
+
+                        <div class="flex flex-col items-center gap-1.5">
+                            <span class="text-xs font-bold text-slate-400 uppercase">Arka Taraf</span>
+                            <div id="mat-input-grid" class="grid grid-cols-4 gap-2 w-56 h-56 sm:w-60 sm:h-60 bg-slate-100 p-2.5 rounded-2xl border-2 border-slate-300"></div>
+                            <span class="text-xs font-bold text-rose-600 uppercase">▲ Ön Taraf (Kırmızı Ok)</span>
+                        </div>
+
+                        <button onclick="checkMatModeA()" class="min-h-[48px] w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-display font-bold text-sm sm:text-base shadow-xs transition">
+                            ✅ Kat Planını Kontrol Et
+                        </button>
+                    </div>
+
+                    <!-- ETKİNLİK B -->
+                    <div id="mat-mode-b" class="hidden flex-col gap-3">
+                        <div class="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-xs text-amber-900 leading-relaxed">
+                            Aşağıda <strong>Üstten Kat Planı (Mat Kodu)</strong> verilen yapının <strong id="mat-b-target-label" class="underline">ÖNDEN</strong> görünümünü sağdaki boş kareleri boyayarak çiz!
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 items-center">
+                            <div class="flex flex-col items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                                <span class="text-[11px] font-bold text-slate-600 mb-1">Verilen Kat Planı</span>
+                                <div id="mat-b-given-grid" class="grid grid-cols-4 gap-1 w-32 h-32 bg-white p-1.5 rounded-xl border border-slate-300"></div>
+                                <span class="text-[10px] font-bold text-rose-600 mt-1">▲ Ön Taraf</span>
+                            </div>
+
+                            <div class="flex flex-col items-center bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-200">
+                                <span id="mat-b-draw-title" class="text-[11px] font-bold text-indigo-700 mb-1">Önden Görünümü Boya</span>
+                                <div id="mat-b-draw-grid" class="grid grid-cols-4 gap-1 w-32 h-32 bg-white p-1.5 rounded-xl border-2 border-indigo-300"></div>
+                                <span class="text-[10px] text-slate-500 mt-1">Karelere dokunarak boya</span>
+                            </div>
+                        </div>
+
+                        <button onclick="checkMatModeB()" class="min-h-[48px] w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-display font-bold text-sm sm:text-base shadow-xs transition">
+                            🎨 Çizimi Kontrol Et
+                        </button>
+                    </div>
+
+                    <div id="mat-feedback" class="hidden p-3 rounded-xl border text-xs font-medium flex flex-col gap-2">
+                        <div id="mat-feedback-text"></div>
+                        <button onclick="nextMatPuzzle()" class="min-h-[44px] w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs sm:text-sm transition">
+                            Yeni Bulmaca Oluştur ➔
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- MODÜL 6: KAZANIM TESTİ & KARNE (TAM GENİŞLİK)             -->
+        <!-- ========================================================= -->
+        <div id="quiz-container" class="hidden max-w-4xl w-full mx-auto flex-col gap-4 animate-pop">
+            <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 class="font-display font-bold text-lg sm:text-xl text-slate-900">6. Kazanım Değerlendirme Testi (M.7.3.3.1 & M.7.3.3.2)</h2>
+                    <p class="text-xs text-slate-500">12 yeni nesil soru ile konuyu pekiştir ve kazanım karneni al.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span id="quiz-progress-badge" class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-xl text-xs font-bold">Soru 1 / 12</span>
+                    <button onclick="restartQuiz()" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition">↺ Testi Sıfırla</button>
+                </div>
+            </div>
+
+            <div id="quiz-dots" class="grid grid-cols-6 sm:grid-cols-12 gap-1.5 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs"></div>
+
+            <div id="quiz-question-area" class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col gap-4">
+                <div class="flex items-center justify-between">
+                    <span id="quiz-kazanim-tag" class="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold">Kazanım: M.7.3.3.1</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+                    <div id="quiz-visual-box" class="md:col-span-5 bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center min-h-[190px]"></div>
+
+                    <div class="md:col-span-7 flex flex-col gap-3">
+                        <p id="quiz-question-text" class="font-semibold text-sm sm:text-base text-slate-900 leading-relaxed"></p>
+                        <div id="quiz-options-list" class="flex flex-col gap-2"></div>
+                    </div>
+                </div>
+
+                <div id="quiz-explanation-box" class="hidden p-4 rounded-2xl border text-xs sm:text-sm leading-relaxed flex flex-col gap-3 animate-pop">
+                    <div id="quiz-explanation-text"></div>
+                    <button onclick="nextQuizQuestion()" id="quiz-next-btn" class="self-end px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm transition">
+                        Sonraki Soru ➔
+                    </button>
+                </div>
+            </div>
+
+            <div id="quiz-report-card" class="hidden bg-white rounded-3xl border border-slate-200 p-6 shadow-md flex flex-col gap-5 animate-pop">
+                <div class="text-center border-b border-slate-100 pb-4">
+                    <div class="text-4xl mb-2">🎓</div>
+                    <h3 class="font-display font-bold text-2xl text-slate-900">7. Sınıf Matematik Kazanım Karnesi</h3>
+                    <p class="text-xs sm:text-sm text-slate-500">Cisimlerin Farklı Yönlerden Görünümleri Ünite Değerlendirmesi</p>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 text-center">
+                    <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
+                        <div class="text-xs font-bold text-emerald-700">DOĞRU</div>
+                        <div id="rep-correct" class="font-display font-bold text-2xl text-emerald-600">0</div>
+                    </div>
+                    <div class="bg-rose-50 border border-rose-200 rounded-2xl p-3">
+                        <div class="text-xs font-bold text-rose-700">YANLIŞ</div>
+                        <div id="rep-wrong" class="font-display font-bold text-2xl text-rose-600">0</div>
+                    </div>
+                    <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-3">
+                        <div class="text-xs font-bold text-indigo-700">BAŞARI</div>
+                        <div id="rep-percent" class="font-display font-bold text-2xl text-indigo-600">%0</div>
+                    </div>
+                </div>
+
+                <div class="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <div>
+                        <div class="flex justify-between text-xs font-bold mb-1">
+                            <span class="text-slate-700">M.7.3.3.1 (Farklı Yönlerden Görünümleri Çizme)</span>
+                            <span id="rep-k1-text" class="text-indigo-700">0/6</span>
+                        </div>
+                        <div class="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                            <div id="rep-k1-bar" class="h-full bg-indigo-600 transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs font-bold mb-1">
+                            <span class="text-slate-700">M.7.3.3.2 (Görünümleri Verilen Yapıyı Oluşturma)</span>
+                            <span id="rep-k2-text" class="text-emerald-700">0/6</span>
+                        </div>
+                        <div class="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                            <div id="rep-k2-bar" class="h-full bg-emerald-600 transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-center gap-3">
+                    <button onclick="restartQuiz()" class="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-display font-bold text-sm transition">
+                        🔄 Testi Tekrar Çöz
+                    </button>
+                    <button onclick="switchMode('explore')" class="px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-display font-bold text-sm transition">
+                        🧊 3B Atölyeye Dön
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- BAŞARI / ROZET MODALI -->
+    <div id="badge-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl border border-slate-100 animate-pop">
+            <div class="w-20 h-20 mx-auto rounded-full bg-amber-100 text-amber-500 flex items-center justify-center text-4xl mb-3 shadow-inner">🏆</div>
+            <h3 id="badge-title" class="font-display font-bold text-2xl text-slate-900 mb-1">Tebrikler!</h3>
+            <p id="badge-desc" class="text-sm text-slate-600 mb-4">Bölümü başarıyla tamamladın.</p>
+            <div class="bg-slate-50 rounded-2xl p-3 mb-5 border border-slate-200 flex justify-around">
+                <div>
+                    <div class="text-[11px] font-bold text-slate-400">TOPLAM PUAN</div>
+                    <div id="badge-score" class="font-display font-bold text-xl text-indigo-600">0</div>
+                </div>
+                <div class="w-px bg-slate-200"></div>
+                <div>
+                    <div class="text-[11px] font-bold text-slate-400">KAZANILAN ROZET</div>
+                    <div id="badge-rank" class="font-display font-bold text-sm text-emerald-600 mt-1">Uzman Mimar</div>
+                </div>
+            </div>
+            <button onclick="closeBadgeModal()" class="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-display font-bold text-base shadow-md transition">
+                Harika, Devam Et!
+            </button>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT: 3B MOTOR (RESIZEOBSERVER + FALLBACK), SES MOTORU, TAHTA KALEMİ VE 6 MODÜL -->
+    <script>
+        // ==========================================
+        // 1. WEB AUDIO API SENTEZLEYİCİ SES MOTORU
+        // ==========================================
+        let soundEnabled = true;
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    audioCtx = new AudioContextClass();
+                }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        ['pointerdown', 'keydown', 'touchstart'].forEach(evt => {
+            window.addEventListener(evt, () => initAudio(), { once: true });
+        });
+
+        function playTone(type, pitchBoost = 0) {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                if (!audioCtx) return;
+                const now = audioCtx.currentTime;
+
+                if (type === 'pop') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    const baseFreq = 440 + (pitchBoost * 65);
+                    osc.frequency.setValueAtTime(baseFreq, now);
+                    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.45, now + 0.085);
+                    gain.gain.setValueAtTime(0.18, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+                    osc.start(now);
+                    osc.stop(now + 0.085);
+                } else if (type === 'remove') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(380, now);
+                    osc.frequency.exponentialRampToValueAtTime(140, now + 0.11);
+                    gain.gain.setValueAtTime(0.18, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+                    osc.start(now);
+                    osc.stop(now + 0.11);
+                } else if (type === 'click') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(680, now);
+                    osc.frequency.exponentialRampToValueAtTime(920, now + 0.045);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+                    osc.start(now);
+                    osc.stop(now + 0.045);
+                } else if (type === 'whoosh') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(220, now);
+                    osc.frequency.exponentialRampToValueAtTime(360, now + 0.14);
+                    gain.gain.setValueAtTime(0.08, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+                    osc.start(now);
+                    osc.stop(now + 0.14);
+                } else if (type === 'success') {
+                    const shift = Math.min(4, pitchBoost) * 35;
+                    const notes = [523.25 + shift, 659.25 + shift, 783.99 + shift, 1046.5 + shift];
+                    notes.forEach((freq, i) => {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.type = 'triangle';
+                        const startT = now + i * 0.075;
+                        osc.frequency.setValueAtTime(freq, startT);
+                        gain.gain.setValueAtTime(0.16, startT);
+                        gain.gain.exponentialRampToValueAtTime(0.001, startT + 0.25);
+                        osc.start(startT);
+                        osc.stop(startT + 0.25);
+                    });
+                } else if (type === 'fanfare') {
+                    const melody = [
+                        { f: 523.25, t: 0.00, d: 0.12 },
+                        { f: 659.25, t: 0.12, d: 0.12 },
+                        { f: 783.99, t: 0.24, d: 0.12 },
+                        { f: 1046.5, t: 0.38, d: 0.35 }
+                    ];
+                    melody.forEach(n => {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(n.f, now + n.t);
+                        gain.gain.setValueAtTime(0.2, now + n.t);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + n.t + n.d);
+                        osc.start(now + n.t);
+                        osc.stop(now + n.t + n.d);
+                    });
+                } else if (type === 'error') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(240, now);
+                    osc.frequency.linearRampToValueAtTime(165, now + 0.26);
+                    gain.gain.setValueAtTime(0.16, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+                    osc.start(now);
+                    osc.stop(now + 0.26);
+                } else if (type === 'pen') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(900, now);
+                    gain.gain.setValueAtTime(0.04, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
+                    osc.start(now);
+                    osc.stop(now + 0.025);
+                }
+            } catch (e) {}
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            document.getElementById('sound-emoji').textContent = soundEnabled ? '🔊' : '🔇';
+            document.getElementById('sound-label').textContent = soundEnabled ? 'Ses Açık' : 'Ses Kapalı';
+            if (soundEnabled) {
+                initAudio();
+                playTone('success', 1);
+            }
+            showToast(soundEnabled ? 'Ses efektleri açıldı (Web Audio Aktif)' : 'Ses efektleri kapatıldı', soundEnabled ? '🔊' : '🔇', 'bg-slate-800');
+        }
+
+        // ==========================================
+        // 1B. AKILLI TAHTA ÖZELLİKLERİ
+        // ==========================================
+        function toggleFullScreen() {
+            playTone('click');
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {
+                    showToast('Tam ekran tarayıcı tarafından engellendi.', '⚠️', 'bg-amber-600');
+                });
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        }
+
+        document.addEventListener('fullscreenchange', () => {
+            const isFs = !!document.fullscreenElement;
+            document.getElementById('fs-icon').textContent = isFs ? '🗗' : '⛶';
+            document.getElementById('fs-label').textContent = isFs ? 'Tam Ekrandan Çık' : 'Tam Ekran';
+            requestAnimationFrame(onWindowResize);
+        });
+
+        let teamScores = { A: 0, B: 0 };
+        function toggleTeamBoard() {
+            playTone('click');
+            document.getElementById('team-scoreboard-bar').classList.toggle('hidden');
+        }
+
+        function updateTeamScore(team, delta) {
+            teamScores[team] = Math.max(0, teamScores[team] + delta);
+            document.getElementById(`team-${team.toLowerCase()}-score`).textContent = teamScores[team];
+            playTone(delta > 0 ? 'success' : 'remove', 1);
+        }
+
+        function resetTeamScores() {
+            teamScores = { A: 0, B: 0 };
+            document.getElementById('team-a-score').textContent = '0';
+            document.getElementById('team-b-score').textContent = '0';
+            playTone('remove');
+        }
+
+        // Şeffaf Akıllı Tahta Kalemi Katmanı
+        let annotationActive = false;
+        let isPenDrawing = false;
+        let penColor = '#ef4444';
+        let isEraserMode = false;
+        let annCanvas, annCtx;
+
+        function initAnnotationCanvas() {
+            annCanvas = document.getElementById('annotation-canvas');
+            annCtx = annCanvas.getContext('2d');
+            resizeAnnotationCanvas();
+            window.addEventListener('resize', resizeAnnotationCanvas);
+
+            annCanvas.addEventListener('pointerdown', (e) => {
+                if (!annotationActive) return;
+                isPenDrawing = true;
+                annCtx.beginPath();
+                annCtx.moveTo(e.clientX, e.clientY);
+                playTone('pen');
+            });
+
+            annCanvas.addEventListener('pointermove', (e) => {
+                if (!annotationActive || !isPenDrawing) return;
+                annCtx.lineCap = 'round';
+                annCtx.lineJoin = 'round';
+                if (isEraserMode) {
+                    annCtx.globalCompositeOperation = 'destination-out';
+                    annCtx.lineWidth = 28;
+                } else {
+                    annCtx.globalCompositeOperation = 'source-over';
+                    annCtx.strokeStyle = penColor;
+                    annCtx.lineWidth = penColor === '#facc15' ? 14 : 5;
+                    annCtx.globalAlpha = penColor === '#facc15' ? 0.45 : 0.95;
+                }
+                annCtx.lineTo(e.clientX, e.clientY);
+                annCtx.stroke();
+            });
+
+            window.addEventListener('pointerup', () => {
+                isPenDrawing = false;
+                if (annCtx) annCtx.globalAlpha = 1;
+            });
+        }
+
+        function resizeAnnotationCanvas() {
+            if (!annCanvas) return;
+            annCanvas.width = window.innerWidth;
+            annCanvas.height = window.innerHeight;
+        }
+
+        function toggleAnnotationMode() {
+            annotationActive = !annotationActive;
+            playTone('click');
+            const toolbar = document.getElementById('annotation-toolbar');
+            const toggleBtn = document.getElementById('pen-toggle-btn');
+
+            if (annotationActive) {
+                annCanvas.classList.remove('hidden', 'pointer-events-none');
+                annCanvas.classList.add('pointer-events-auto', 'cursor-crosshair');
+                toolbar.classList.remove('hidden');
+                toggleBtn.classList.add('ring-2', 'ring-rose-500', 'bg-rose-100');
+                showToast('Tahta Kalemi Açık! Ekranın herhangi bir yerine çizebilirsiniz.', '✏️', 'bg-rose-600');
+            } else {
+                annCanvas.classList.add('pointer-events-none');
+                annCanvas.classList.remove('pointer-events-auto', 'cursor-crosshair');
+                toolbar.classList.add('hidden');
+                toggleBtn.classList.remove('ring-2', 'ring-rose-500', 'bg-rose-100');
+            }
+        }
+
+        function setPenColor(hex) {
+            isEraserMode = false;
+            penColor = hex;
+            playTone('click');
+            ['red', 'blue', 'green', 'yellow'].forEach(c => {
+                document.getElementById(`pen-color-${c}`).classList.remove('ring-4', 'ring-white');
+                document.getElementById(`pen-color-${c}`).classList.add('opacity-75');
+            });
+            const map = { '#ef4444': 'red', '#3b82f6': 'blue', '#10b981': 'green', '#facc15': 'yellow' };
+            const activeEl = document.getElementById(`pen-color-${map[hex]}`);
+            if (activeEl) {
+                activeEl.classList.add('ring-4', 'ring-white');
+                activeEl.classList.remove('opacity-75');
+            }
+            document.getElementById('pen-eraser-btn').classList.remove('ring-2', 'ring-white');
+        }
+
+        function setPenEraser() {
+            isEraserMode = true;
+            playTone('click');
+            document.getElementById('pen-eraser-btn').classList.add('ring-2', 'ring-white');
+        }
+
+        function clearAnnotationCanvas() {
+            if (annCtx && annCanvas) {
+                annCtx.clearRect(0, 0, annCanvas.width, annCanvas.height);
+                playTone('remove');
+            }
+        }
+
+        // ==========================================
+        // 2. UYGULAMA DURUMU & 10 HAZIR 3B MODEL
+        // ==========================================
+        const GRID_SIZE = 4;
+        let currentMode = 'explore';
+        let globalScore = 0;
+        let activeCubes = new Set();
+        let hintHighlightCubes = new Set();
+        let customBuildActive = false;
+        let buildTool = 'add';
+
+        const PRESETS = {
+            stairs:   ['0,0,1','1,0,1','2,0,1','3,0,1','1,1,1','2,1,1','3,1,1','2,2,1','3,2,1','3,3,1','0,0,2','1,0,2','2,0,2','3,0,2','1,1,2','2,1,2','3,1,2','2,2,2','3,2,2','3,3,2'],
+            lblock:   ['1,0,0','1,0,1','1,0,2','1,0,3','2,0,3','3,0,3','1,1,0','1,1,1','1,1,2','1,1,3','1,2,0','1,2,1'],
+            ublock:   ['0,0,1','0,1,1','0,2,1','1,0,1','2,0,1','3,0,1','3,1,1','3,2,1','0,0,2','3,0,2'],
+            arch:     ['0,0,1','0,1,1','0,2,1','1,2,1','2,2,1','3,0,1','3,1,1','3,2,1','0,0,2','3,0,2'],
+            pyramid:  ['0,0,0','1,0,0','2,0,0','3,0,0','0,0,1','1,0,1','2,0,1','3,0,1','0,0,2','1,0,2','2,0,2','3,0,2','0,0,3','1,0,3','2,0,3','3,0,3','1,1,1','2,1,1','1,1,2','2,1,2','1,2,1'],
+            bridge:   ['0,0,1','0,1,1','0,0,2','0,1,2','1,1,1','1,1,2','2,1,1','2,1,2','3,0,1','3,1,1','3,0,2','3,1,2'],
+            tblock:   ['1,0,1','1,1,1','1,2,1','1,3,1','0,3,1','2,3,1','3,3,1','1,0,2','1,1,2'],
+            zblock:   ['0,0,1','1,0,1','1,1,1','2,1,1','2,2,1','3,2,1','0,0,2','1,0,2'],
+            castle:   ['0,0,0','0,1,0','0,2,0','3,0,0','3,1,0','3,2,0','0,0,3','0,1,3','0,2,3','3,0,3','3,1,3','3,2,3','1,0,0','2,0,0','1,0,3','2,0,3'],
+            diagstep: ['0,0,0','0,1,0','0,2,0','1,0,1','1,1,1','2,0,2','2,1,2','3,0,3']
+        };
+
+        // ==========================================
+        // 3. THREE.JS 3B SAHNE MOTORU (GARANTİLİ GÖRÜNÜRLÜK & RESIZEOBSERVER)
+        // ==========================================
+        let scene, camera, renderer, cubeGroup, baseGridGroup, arrowsGroup;
+        let raycaster, pointer;
+        let isDragging = false;
+        let dragMoved = false;
+        let prevMouse = { x: 0, y: 0 };
+
+        let camRadius = 8.4;
+        let camTheta = Math.PI / 4;
+        let camPhi = Math.PI / 3.1;
+        let targetTheta = camTheta;
+        let targetPhi = camPhi;
+
+        function initThreeJS() {
+            const container = document.getElementById('canvas-wrapper');
+            const canvas = document.getElementById('three-canvas');
+
+            // Güvenli boyut fallback değerleri (asla 0 olmaz)
+            const width = container.clientWidth || 640;
+            const height = container.clientHeight || 480;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf1f5f9);
+
+            camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 100);
+            updateCameraPosition(true);
+
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false });
+            renderer.setSize(width, height, false);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            // Güçlü ve Dengeli Sahne Aydınlatması
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.72);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.78);
+            dirLight.position.set(7, 13, 8);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            scene.add(dirLight);
+
+            const backLight = new THREE.DirectionalLight(0xe0e7ff, 0.4);
+            backLight.position.set(-6, 6, -7);
+            scene.add(backLight);
+
+            // 4x4 Taban Platformu
+            baseGridGroup = new THREE.Group();
+            const tileGeo = new THREE.BoxGeometry(0.96, 0.14, 0.96);
+            const tileEdgesGeo = new THREE.EdgesGeometry(tileGeo);
+            const tileEdgeMat = new THREE.LineBasicMaterial({ color: 0x94a3b8 });
+
+            for (let gx = 0; gx < GRID_SIZE; gx++) {
+                for (let gz = 0; gz < GRID_SIZE; gz++) {
+                    const isEven = (gx + gz) % 2 === 0;
+                    const tileMat = new THREE.MeshStandardMaterial({
+                        color: isEven ? 0xe2e8f0 : 0xcbd5e1,
+                        roughness: 0.75
+                    });
+                    const tile = new THREE.Mesh(tileGeo, tileMat);
+                    tile.position.set(gx - 1.5, -0.07, gz - 1.5);
+                    tile.receiveShadow = true;
+                    tile.userData = { isBaseTile: true, gx, gy: -1, gz };
+
+                    const tileWire = new THREE.LineSegments(tileEdgesGeo, tileEdgeMat);
+                    tile.add(tileWire);
+                    baseGridGroup.add(tile);
+                }
+            }
+            scene.add(baseGridGroup);
+
+            // Yön Okları ve Etiketleri
+            arrowsGroup = new THREE.Group();
+            buildDirectionIndicators();
+            scene.add(arrowsGroup);
+
+            // Aktif Küpler Grubu
+            cubeGroup = new THREE.Group();
+            scene.add(cubeGroup);
+
+            raycaster = new THREE.Raycaster();
+            pointer = new THREE.Vector2();
+
+            setupInteractionEvents(canvas);
+
+            // ResizeObserver ile kapsayıcı boyutu değiştiği an sahneyi güncelle
+            if (typeof ResizeObserver !== 'undefined') {
+                const ro = new ResizeObserver(() => {
+                    onWindowResize();
+                });
+                ro.observe(container);
+            }
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createTextSprite(text, bgColor) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 96;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = bgColor;
+            ctx.beginPath();
+            ctx.roundRect(16, 12, 224, 72, 24);
+            ctx.fill();
+            ctx.font = 'bold 42px Inter, sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 128, 49);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(1.45, 0.54, 1);
+            return sprite;
+        }
+
+        function buildDirectionIndicators() {
+            const frontArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0.05, 3.05), 0.7, 0xf43f5e, 0.28, 0.24);
+            arrowsGroup.add(frontArrow);
+            const frontLabel = createTextSprite('ÖN', '#e11d48');
+            frontLabel.position.set(0, 0.45, 3.25);
+            arrowsGroup.add(frontLabel);
+
+            const rightArrow = new THREE.ArrowHelper(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(3.05, 0.05, 0), 0.7, 0x10b981, 0.28, 0.24);
+            arrowsGroup.add(rightArrow);
+            const rightLabel = createTextSprite('SAĞ', '#059669');
+            rightLabel.position.set(3.25, 0.45, 0);
+            arrowsGroup.add(rightLabel);
+
+            const leftArrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(-3.05, 0.05, 0), 0.7, 0xf59e0b, 0.28, 0.24);
+            arrowsGroup.add(leftArrow);
+            const leftLabel = createTextSprite('SOL', '#d97706');
+            leftLabel.position.set(-3.25, 0.45, 0);
+            arrowsGroup.add(leftLabel);
+        }
+
+        const LAYER_COLORS = [0x4f46e5, 0x2563eb, 0x0284c7, 0x0d9488];
+
+        function rebuild3DCubes() {
+            if (!cubeGroup) return;
+            while (cubeGroup.children.length > 0) {
+                cubeGroup.remove(cubeGroup.children[0]);
+            }
+
+            const boxGeo = new THREE.BoxGeometry(0.98, 0.98, 0.98);
+            const edgesGeo = new THREE.EdgesGeometry(boxGeo);
+            // Akıllı tahtada maksimum kontrast için koyu lacivert/siyah kenar çizgisi
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x0f172a, linewidth: 2 });
+
+            activeCubes.forEach(key => {
+                const [gx, gy, gz] = key.split(',').map(Number);
+                const mat = new THREE.MeshStandardMaterial({
+                    color: LAYER_COLORS[gy % LAYER_COLORS.length],
+                    roughness: 0.32,
+                    metalness: 0.06
+                });
+
+                const mesh = new THREE.Mesh(boxGeo, mat);
+                mesh.position.set(gx - 1.5, gy + 0.5, gz - 1.5);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                mesh.userData = { isCube: true, gx, gy, gz, key };
+
+                const wireframe = new THREE.LineSegments(edgesGeo, lineMat);
+                mesh.add(wireframe);
+                cubeGroup.add(mesh);
+            });
+
+            // İpucu hayalet küpleri (varsa)
+            hintHighlightCubes.forEach(key => {
+                if (!activeCubes.has(key)) {
+                    const [gx, gy, gz] = key.split(',').map(Number);
+                    const ghostMat = new THREE.MeshStandardMaterial({
+                        color: 0xf59e0b,
+                        transparent: true,
+                        opacity: 0.48
+                    });
+                    const ghost = new THREE.Mesh(boxGeo, ghostMat);
+                    ghost.position.set(gx - 1.5, gy + 0.5, gz - 1.5);
+                    const ghostWire = new THREE.LineSegments(edgesGeo, new THREE.LineBasicMaterial({ color: 0xb45309 }));
+                    ghost.add(ghostWire);
+                    cubeGroup.add(ghost);
+                }
+            });
+
+            document.getElementById('cube-count-badge').textContent = `${activeCubes.size} Küp`;
+            const archCountEl = document.getElementById('arch-user-cube-count');
+            if (archCountEl) archCountEl.textContent = `Kullanılan: ${activeCubes.size} Küp`;
+            updateAll2DPreviews();
+
+            // Anında sahneyi yeniden çizdir
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+
+        function updateCameraPosition(instant = false) {
+            if (!camera) return;
+            if (instant) {
+                camTheta = targetTheta;
+                camPhi = targetPhi;
+            } else {
+                camTheta += (targetTheta - camTheta) * 0.14;
+                camPhi += (targetPhi - camPhi) * 0.14;
+            }
+            camPhi = Math.max(0.08, Math.min(Math.PI / 2 - 0.05, camPhi));
+
+            const centerY = 1.4;
+            camera.position.x = camRadius * Math.sin(camPhi) * Math.sin(camTheta);
+            camera.position.y = centerY + camRadius * Math.cos(camPhi);
+            camera.position.z = camRadius * Math.sin(camPhi) * Math.cos(camTheta);
+            camera.lookAt(0, centerY, 0);
+        }
+
+        function setCameraPreset(view) {
+            playTone('whoosh');
+            const twoPi = Math.PI * 2;
+            const currentTurns = Math.round(camTheta / twoPi);
+            const base = currentTurns * twoPi;
+
+            switch (view) {
+                case 'iso':   targetTheta = base + Math.PI / 4; targetPhi = Math.PI / 3.1; break;
+                case 'front': targetTheta = base + 0;           targetPhi = Math.PI / 2 - 0.06; break;
+                case 'right': targetTheta = base + Math.PI / 2; targetPhi = Math.PI / 2 - 0.06; break;
+                case 'back':  targetTheta = base + Math.PI;     targetPhi = Math.PI / 2 - 0.06; break;
+                case 'left':  targetTheta = base - Math.PI / 2; targetPhi = Math.PI / 2 - 0.06; break;
+                case 'top':   targetTheta = base + 0;           targetPhi = 0.08; break;
+            }
+        }
+
+        // ==========================================
+        // 4. FARE / DOKUNMATİK ETKİLEŞİMİ
+        // ==========================================
+        function setupInteractionEvents(canvas) {
+            canvas.addEventListener('pointerdown', (e) => {
+                isDragging = true;
+                dragMoved = false;
+                prevMouse = { x: e.clientX, y: e.clientY };
+            });
+
+            window.addEventListener('pointermove', (e) => {
+                if (!isDragging) return;
+                const dx = e.clientX - prevMouse.x;
+                const dy = e.clientY - prevMouse.y;
+                if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragMoved = true;
+
+                targetTheta -= dx * 0.009;
+                targetPhi -= dy * 0.009;
+                targetPhi = Math.max(0.08, Math.min(Math.PI / 2 - 0.05, targetPhi));
+                prevMouse = { x: e.clientX, y: e.clientY };
+            });
+
+            window.addEventListener('pointerup', (e) => {
+                if (isDragging && !dragMoved && e.target === canvas) {
+                    handleCanvasClick(e);
+                }
+                isDragging = false;
+            });
+
+            canvas.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                handleCanvasClick(e, true);
+            });
+        }
+
+        function canEditCubes() {
+            return (currentMode === 'explore' && customBuildActive) || currentMode === 'architect';
+        }
+
+        function handleCanvasClick(event, forceRemove = false) {
+            if (!canEditCubes()) return;
+            hintHighlightCubes.clear();
+
+            const canvas = document.getElementById('three-canvas');
+            const rect = canvas.getBoundingClientRect();
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(pointer, camera);
+            const targets = [...cubeGroup.children.filter(c => c.userData.isCube), ...baseGridGroup.children.filter(c => c.userData.isBaseTile)];
+            const intersects = raycaster.intersectObjects(targets, false);
+
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+                const data = hit.object.userData;
+                const effectiveTool = (forceRemove || event.button === 2) ? 'remove' : buildTool;
+
+                if (effectiveTool === 'remove') {
+                    if (data.isCube) {
+                        activeCubes.delete(data.key);
+                        playTone('remove');
+                        rebuild3DCubes();
+                    }
+                } else if (effectiveTool === 'add') {
+                    const normal = hit.face.normal;
+                    const nx = data.gx + Math.round(normal.x);
+                    const ny = data.gy + Math.round(normal.y);
+                    const nz = data.gz + Math.round(normal.z);
+
+                    if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE && nz >= 0 && nz < GRID_SIZE) {
+                        const newKey = `${nx},${ny},${nz}`;
+                        if (!activeCubes.has(newKey)) {
+                            activeCubes.add(newKey);
+                            playTone('pop', ny);
+                            rebuild3DCubes();
+                        }
+                    } else {
+                        playTone('error');
+                        showToast('4x4x4 inşa sınırına ulaştın!', '⚠️', 'bg-amber-600');
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 5. 2B PROJEKSİYON & MAT (KAT PLANI) MOTORU
+        // ==========================================
+        function computeViews(cubeSet) {
+            const front = Array.from({ length: 4 }, () => Array(4).fill(false));
+            const back  = Array.from({ length: 4 }, () => Array(4).fill(false));
+            const right = Array.from({ length: 4 }, () => Array(4).fill(false));
+            const left  = Array.from({ length: 4 }, () => Array(4).fill(false));
+            const top   = Array.from({ length: 4 }, () => Array(4).fill(false));
+            const matCounts = Array.from({ length: 4 }, () => Array(4).fill(0));
+
+            cubeSet.forEach(key => {
+                const [x, y, z] = key.split(',').map(Number);
+                const rowY = 3 - y;
+                front[rowY][x] = true;
+                back[rowY][3 - x] = true;
+                right[rowY][3 - z] = true;
+                left[rowY][z] = true;
+                top[z][x] = true;
+                matCounts[z][x] += 1;
+            });
+
+            return { front, back, right, left, top, matCounts };
+        }
+
+        function renderMatrixToContainer(containerId, matrix, matCounts = null) {
+            const el = document.getElementById(containerId);
+            if (!el) return;
+            el.innerHTML = '';
+            for (let r = 0; r < 4; r++) {
+                for (let c = 0; c < 4; c++) {
+                    const cell = document.createElement('div');
+                    const filled = matrix[r][c];
+                    cell.className = `rounded-[3px] border flex items-center justify-center text-[10px] font-bold transition-colors ${
+                        filled ? 'grid-cell-filled text-white' : 'grid-cell-empty text-slate-400'
+                    }`;
+                    if (matCounts && filled) {
+                        cell.textContent = matCounts[r][c];
+                    }
+                    el.appendChild(cell);
+                }
+            }
+        }
+
+        function updateAll2DPreviews() {
+            const views = computeViews(activeCubes);
+            if (currentMode === 'explore') {
+                const showMat = document.getElementById('toggle-mat-numbers')?.checked;
+                renderMatrixToContainer('live-view-front', views.front);
+                renderMatrixToContainer('live-view-right', views.right);
+                renderMatrixToContainer('live-view-top', views.top, showMat ? views.matCounts : null);
+                renderMatrixToContainer('live-view-left', views.left);
+                renderMatrixToContainer('live-view-back', views.back);
+            } else if (currentMode === 'architect') {
+                renderMatrixToContainer('arch-user-front', views.front);
+                renderMatrixToContainer('arch-user-right', views.right);
+                renderMatrixToContainer('arch-user-top', views.top);
+                updateArchitectLiveStatus(views);
+            }
+        }
+
+        // ==========================================
+        // 6. MODÜL YÖNETİMİ
+        // ==========================================
+        function switchMode(mode) {
+            currentMode = mode;
+            hintHighlightCubes.clear();
+            playTone('click');
+
+            ['explore', 'hunter', 'architect', 'detective', 'matpuzzle', 'quiz'].forEach(m => {
+                const btn = document.getElementById(`nav-${m}`);
+                if (m === mode) {
+                    btn.className = 'tab-active smart-btn px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap';
+                } else {
+                    btn.className = 'text-slate-600 hover:text-slate-900 smart-btn px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap';
+                }
+            });
+
+            const workspace = document.getElementById('workspace-container');
+            const quizContainer = document.getElementById('quiz-container');
+
+            if (mode === 'quiz') {
+                workspace.classList.add('hidden');
+                quizContainer.classList.remove('hidden');
+                initQuizModule();
+                return;
+            } else {
+                workspace.classList.remove('hidden');
+                quizContainer.classList.add('hidden');
+                // Sekme görünür olduktan hemen sonra 3B sahneyi yeniden boyutlandır
+                requestAnimationFrame(() => onWindowResize());
+            }
+
+            ['explore', 'hunter', 'architect', 'detective', 'matpuzzle'].forEach(p => {
+                document.getElementById(`panel-${p}`).classList.toggle('hidden', p !== mode);
+            });
+
+            const showBuilder = (mode === 'explore' && customBuildActive) || mode === 'architect';
+            document.getElementById('builder-toolbar').classList.toggle('hidden', !showBuilder);
+            document.getElementById('build-hint-badge').classList.toggle('hidden', !showBuilder);
+
+            if (mode === 'explore') {
+                if (activeCubes.size === 0) loadPreset('stairs');
+                else rebuild3DCubes();
+            } else if (mode === 'hunter') {
+                startHunterGame();
+            } else if (mode === 'architect') {
+                setBuildTool('add');
+                renderArchitectLevelDots();
+                loadArchitectLevel(archState.level);
+            } else if (mode === 'detective') {
+                startDetectiveMode();
+            } else if (mode === 'matpuzzle') {
+                initMatPuzzleModule();
+            }
+        }
+
+        function loadPreset(name) {
+            customBuildActive = false;
+            document.getElementById('builder-toolbar').classList.add('hidden');
+            document.getElementById('build-hint-badge').classList.add('hidden');
+            activeCubes = new Set(PRESETS[name]);
+            playTone('pop');
+            rebuild3DCubes();
+            setCameraPreset('iso');
+        }
+
+        function enableCustomBuild() {
+            customBuildActive = true;
+            setBuildTool('add');
+            document.getElementById('builder-toolbar').classList.remove('hidden');
+            document.getElementById('build-hint-badge').classList.remove('hidden');
+            playTone('pop');
+            showToast('Serbest İnşa aktif! Tabana veya küplere dokunarak ekle/sil.', '✏️', 'bg-indigo-600');
+        }
+
+        function setBuildTool(tool) {
+            buildTool = tool;
+            playTone('click');
+            const addBtn = document.getElementById('tool-add');
+            const remBtn = document.getElementById('tool-remove');
+            if (tool === 'add') {
+                addBtn.className = 'min-h-[48px] px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 transition';
+                remBtn.className = 'min-h-[48px] px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-rose-100 hover:text-rose-700 text-xs sm:text-sm font-bold flex items-center gap-1.5 transition';
+            } else {
+                remBtn.className = 'min-h-[48px] px-4 py-2 rounded-xl bg-rose-600 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 transition';
+                addBtn.className = 'min-h-[48px] px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-indigo-100 hover:text-indigo-700 text-xs sm:text-sm font-bold flex items-center gap-1.5 transition';
+            }
+        }
+
+        function clearGrid() {
+            activeCubes.clear();
+            hintHighlightCubes.clear();
+            playTone('remove');
+            rebuild3DCubes();
+        }
+
+        // ==========================================
+        // 7. MODÜL 2: GÖRÜNÜM AVCISI
+        // ==========================================
+        let hunterState = {
+            difficulty: 'easy',
+            qNum: 1,
+            maxQ: 10,
+            streak: 1,
+            timeLeft: 30,
+            timerId: null,
+            answered: false,
+            targetDir: 'front'
+        };
+
+        const DIR_META = {
+            front: { label: 'ÖNDEN', badgeClass: 'bg-rose-500 text-white' },
+            right: { label: 'SAĞDAN', badgeClass: 'bg-emerald-500 text-white' },
+            left:  { label: 'SOLDAN', badgeClass: 'bg-amber-500 text-white' },
+            top:   { label: 'ÜSTTEN', badgeClass: 'bg-sky-500 text-white' },
+            back:  { label: 'ARKADAN', badgeClass: 'bg-purple-500 text-white' }
+        };
+
+        function setHunterDifficulty(diff) {
+            hunterState.difficulty = diff;
+            ['easy', 'medium', 'hard'].forEach(d => {
+                const btn = document.getElementById(`diff-${d}`);
+                if (d === diff) {
+                    btn.className = 'px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white transition';
+                } else {
+                    btn.className = 'px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-600 border border-slate-200 transition';
+                }
+            });
+            startHunterGame();
+        }
+
+        function generateRandomStructure(cubeCount = 7, maxBound = 4) {
+            const set = new Set();
+            const offset = maxBound === 3 ? 1 : 0;
+            const startX = offset + Math.floor(Math.random() * (maxBound - 1));
+            const startZ = offset + Math.floor(Math.random() * (maxBound - 1));
+            set.add(`${startX},0,${startZ}`);
+
+            let attempts = 0;
+            while (set.size < cubeCount && attempts < 140) {
+                attempts++;
+                const arr = Array.from(set);
+                const base = arr[Math.floor(Math.random() * arr.length)].split(',').map(Number);
+                const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,0,1],[0,0,-1]];
+                const d = dirs[Math.floor(Math.random() * dirs.length)];
+                const nx = base[0] + d[0];
+                const ny = base[1] + d[1];
+                const nz = base[2] + d[2];
+
+                if (nx >= offset && nx < offset + maxBound && ny >= 0 && ny < maxBound && nz >= offset && nz < offset + maxBound) {
+                    if (ny === 0 || set.has(`${nx},${ny - 1},${nz}`)) {
+                        set.add(`${nx},${ny},${nz}`);
+                    }
+                }
+            }
+            return set;
+        }
+
+        function matricesEqual(m1, m2) {
+            for (let r = 0; r < 4; r++) {
+                for (let c = 0; c < 4; c++) {
+                    if (m1[r][c] !== m2[r][c]) return false;
+                }
+            }
+            return true;
+        }
+
+        function flipHorizontal(mat) { return mat.map(row => [...row].reverse()); }
+        function mutateMatrix(mat) {
+            const copy = mat.map(row => [...row]);
+            const r = Math.floor(Math.random() * 4);
+            const c = Math.floor(Math.random() * 4);
+            copy[r][c] = !copy[r][c];
+            return copy;
+        }
+
+        function startHunterGame() {
+            hunterState.qNum = 1;
+            hunterState.streak = 1;
+            loadHunterQuestion();
+        }
+
+        function loadHunterQuestion() {
+            clearInterval(hunterState.timerId);
+            hunterState.answered = false;
+            hunterState.timeLeft = hunterState.difficulty === 'hard' ? 25 : 30;
+
+            document.getElementById('hunter-q-num').textContent = hunterState.qNum;
+            document.getElementById('hunter-streak').textContent = `x${hunterState.streak}`;
+            document.getElementById('hunter-timer').textContent = `${hunterState.timeLeft}s`;
+            document.getElementById('hunter-feedback').classList.add('hidden');
+
+            let count = 6, bound = 3, dirs = ['front', 'right', 'top'];
+            if (hunterState.difficulty === 'medium') {
+                count = 8; bound = 4; dirs = ['front', 'right', 'top', 'left'];
+            } else if (hunterState.difficulty === 'hard') {
+                count = 11; bound = 4; dirs = ['left', 'back', 'right', 'front', 'top'];
+            }
+
+            activeCubes = generateRandomStructure(count, bound);
+            rebuild3DCubes();
+            setCameraPreset('iso');
+
+            const dir = dirs[Math.floor(Math.random() * dirs.length)];
+            hunterState.targetDir = dir;
+
+            const dirBadge = document.getElementById('hunter-target-dir');
+            dirBadge.textContent = DIR_META[dir].label;
+            dirBadge.className = `px-2 py-0.5 rounded-md font-display font-bold text-sm mx-1 ${DIR_META[dir].badgeClass}`;
+
+            const views = computeViews(activeCubes);
+            const correct = views[dir];
+
+            const distractors = [];
+            const candidates = [flipHorizontal(correct), views.front, views.right, views.top, views.left, views.back, mutateMatrix(correct), mutateMatrix(flipHorizontal(correct))];
+            for (const cand of candidates) {
+                if (distractors.length >= 3) break;
+                if (!matricesEqual(cand, correct) && !distractors.some(d => matricesEqual(d, cand))) {
+                    distractors.push(cand);
+                }
+            }
+            while (distractors.length < 3) {
+                const m = mutateMatrix(correct);
+                if (!matricesEqual(m, correct)) distractors.push(m);
+            }
+
+            const options = [{ matrix: correct, isCorrect: true }, ...distractors.map(m => ({ matrix: m, isCorrect: false }))].sort(() => Math.random() - 0.5);
+            const optionsContainer = document.getElementById('hunter-options');
+            optionsContainer.innerHTML = '';
+
+            const labels = ['A', 'B', 'C', 'D'];
+            options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'bg-slate-50 hover:bg-indigo-50 border-2 border-slate-200 hover:border-indigo-400 rounded-2xl p-2.5 flex flex-col items-center gap-1.5 transition';
+                btn.onclick = () => selectHunterOption(btn, opt.isCorrect);
+
+                btn.innerHTML = `<div class="w-full flex items-center justify-between text-xs font-bold text-slate-500"><span class="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center text-slate-700">${labels[idx]}</span></div>`;
+                const gridDiv = document.createElement('div');
+                gridDiv.className = 'grid grid-cols-4 gap-0.5 w-20 h-20 sm:w-22 sm:h-22 bg-white p-1 rounded-xl border border-slate-200';
+                for (let r = 0; r < 4; r++) {
+                    for (let c = 0; c < 4; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = `rounded-[2px] border ${opt.matrix[r][c] ? 'grid-cell-filled' : 'grid-cell-empty'}`;
+                        gridDiv.appendChild(cell);
+                    }
+                }
+                btn.appendChild(gridDiv);
+                optionsContainer.appendChild(btn);
+            });
+
+            hunterState.timerId = setInterval(() => {
+                if (hunterState.answered) return;
+                hunterState.timeLeft--;
+                document.getElementById('hunter-timer').textContent = `${hunterState.timeLeft}s`;
+                if (hunterState.timeLeft <= 0) {
+                    clearInterval(hunterState.timerId);
+                    handleHunterTimeout();
+                }
+            }, 1000);
+        }
+
+        function selectHunterOption(btn, isCorrect) {
+            if (hunterState.answered) return;
+            hunterState.answered = true;
+            clearInterval(hunterState.timerId);
+            setCameraPreset(hunterState.targetDir);
+
+            const fbBox = document.getElementById('hunter-feedback');
+            const fbText = document.getElementById('hunter-feedback-text');
+            fbBox.classList.remove('hidden');
+
+            if (isCorrect) {
+                btn.classList.add('border-emerald-500', 'bg-emerald-50');
+                const mult = hunterState.difficulty === 'hard' ? 15 : (hunterState.difficulty === 'medium' ? 12 : 10);
+                const earned = mult * hunterState.streak;
+                addScore(earned);
+                playTone('success', hunterState.streak);
+                hunterState.streak = Math.min(5, hunterState.streak + 1);
+                fbBox.className = 'p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 text-xs sm:text-sm font-medium flex flex-col gap-2 animate-pop';
+                fbText.innerHTML = `🎉 <strong>Harika! +${earned} Puan!</strong> Kamera otomatik olarak <strong>${DIR_META[hunterState.targetDir].label}</strong> bakış açısına döndü.`;
+            } else {
+                btn.classList.add('border-rose-500', 'bg-rose-50');
+                hunterState.streak = 1;
+                playTone('error');
+                fbBox.className = 'p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-900 text-xs sm:text-sm font-medium flex flex-col gap-2 animate-pop';
+                fbText.innerHTML = `❌ <strong>Yanlış Seçenek!</strong> Simetri veya derinlik hatası yaptın. 3B yapıyı <strong>${DIR_META[hunterState.targetDir].label}</strong> açısına döndürdük, inceleyebilirsin.`;
+            }
+            document.getElementById('hunter-streak').textContent = `x${hunterState.streak}`;
+        }
+
+        function handleHunterTimeout() {
+            hunterState.answered = true;
+            hunterState.streak = 1;
+            setCameraPreset(hunterState.targetDir);
+            playTone('error');
+            const fbBox = document.getElementById('hunter-feedback');
+            fbBox.className = 'p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs sm:text-sm font-medium flex flex-col gap-2 animate-pop';
+            document.getElementById('hunter-feedback-text').innerHTML = `⏰ <strong>Süre Doldu!</strong> <strong>${DIR_META[hunterState.targetDir].label}</strong> görünümü sol ekranda gösteriliyor.`;
+            fbBox.classList.remove('hidden');
+        }
+
+        function nextHunterQuestion() {
+            if (hunterState.qNum >= hunterState.maxQ) {
+                showBadgeModal('Görünüm Avcısı Tamamlandı!', '10 soruluk 3B görünüm avını başarıyla bitirdin!', 'Görünüm Avcısı 🏹');
+                hunterState.qNum = 1;
+            } else {
+                hunterState.qNum++;
+            }
+            loadHunterQuestion();
+        }
+
+        // ==========================================
+        // 8. MODÜL 3: MİMAR MÜCADELESİ (12 SEVİYE)
+        // ==========================================
+        const ARCHITECT_LEVELS = [
+            { cubes: ['1,0,1','2,0,1','1,1,1','1,0,2'], constraint: null, desc: 'Temel L-köşe yapısını inşa et.' },
+            { cubes: ['1,0,1','1,0,2','2,0,1','2,0,2','2,1,1','2,1,2'], constraint: null, desc: 'İki basamaklı merdiven yapısını inşa et.' },
+            { cubes: ['0,0,0','0,1,0','0,2,0','1,0,0','2,0,0','0,0,1','0,0,2'], constraint: null, desc: 'Köşe kule yapısını oluştur.' },
+            { cubes: ['0,0,1','0,1,1','1,0,1','2,0,1','2,1,1','2,0,2'], constraint: null, desc: 'U-tabanlı yükseltiyi inşa et.' },
+            { cubes: ['0,0,2','0,1,2','1,0,1','1,1,1','1,2,1','2,0,0','3,0,0'], constraint: null, desc: 'Çapraz eksende alçalan blokları oluştur.' },
+            { cubes: ['0,0,1','0,1,1','0,2,1','1,2,1','2,0,1','2,1,1','2,2,1','2,0,2'], constraint: null, desc: 'Kemerli geçiş kapısını inşa et.' },
+            { cubes: ['1,0,1','2,0,2','1,1,1','2,1,2'], constraint: { type: 'min', count: 4 }, desc: 'BONUS GÖREV: Bu görünümleri EN AZ (4) küp kullanarak elde et!' },
+            { cubes: ['1,0,1','2,0,1','1,0,2','2,0,2','1,1,1','2,1,1','1,1,2','2,1,2'], constraint: { type: 'max', count: 8 }, desc: 'BONUS GÖREV: Bu görünümleri EN ÇOK (8) küp kullanarak doldur!' },
+            { cubes: ['1,0,1','1,1,1','1,2,1','0,2,1','2,2,1','1,0,2'], constraint: null, desc: 'T-ankraj kulesini inşa et.' },
+            { cubes: ['0,0,1','1,0,1','1,1,1','2,1,1','2,2,1','3,2,1','3,0,2'], constraint: null, desc: 'Z-basamaklı modern yapıyı inşa et.' },
+            { cubes: ['0,0,0','1,0,1','2,0,2','0,1,0','1,1,1','2,1,2'], constraint: { type: 'min', count: 6 }, desc: 'BONUS GÖREV: Köşegen dizilimi EN AZ (6) küple oluştur!' },
+            { cubes: ['0,0,0','0,1,0','0,2,0','3,0,0','3,1,0','3,2,0','0,0,3','0,1,3','3,0,3','3,1,3','1,0,0','2,0,0'], constraint: null, desc: 'FİNAL SEVİYESİ: Dört burçlu kaleyi inşa et!' }
+        ];
+
+        let archState = { level: 1, targetViews: null, completed: new Set() };
+
+        function renderArchitectLevelDots() {
+            const container = document.getElementById('arch-level-dots');
+            container.innerHTML = '';
+            for (let i = 1; i <= ARCHITECT_LEVELS.length; i++) {
+                const btn = document.createElement('button');
+                const isDone = archState.completed.has(i);
+                const isCurr = archState.level === i;
+                btn.className = `w-7 h-7 rounded-lg text-xs font-bold shrink-0 transition ${
+                    isCurr ? 'bg-indigo-600 text-white' : (isDone ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' : 'bg-slate-100 text-slate-600')
+                }`;
+                btn.textContent = i;
+                btn.onclick = () => loadArchitectLevel(i);
+                container.appendChild(btn);
+            }
+        }
+
+        function loadArchitectLevel(lvl) {
+            archState.level = lvl;
+            hintHighlightCubes.clear();
+            const levelData = ARCHITECT_LEVELS[lvl - 1];
+            document.getElementById('arch-level').textContent = lvl;
+            document.getElementById('arch-feedback').classList.add('hidden');
+
+            const badge = document.getElementById('arch-constraint-badge');
+            const missionBox = document.getElementById('arch-mission-box');
+            if (levelData.constraint) {
+                badge.classList.remove('hidden');
+                badge.textContent = levelData.constraint.type === 'min' ? `En Az ${levelData.constraint.count} Küp` : `En Çok ${levelData.constraint.count} Küp`;
+                missionBox.className = 'bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-xs text-amber-900 font-medium leading-relaxed';
+            } else {
+                badge.classList.add('hidden');
+                missionBox.className = 'bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-700 leading-relaxed';
+            }
+            missionBox.textContent = levelData.desc;
+
+            const targetSet = new Set(levelData.cubes);
+            archState.targetViews = computeViews(targetSet);
+
+            renderMatrixToContainer('arch-target-front', archState.targetViews.front);
+            renderMatrixToContainer('arch-target-right', archState.targetViews.right);
+            renderMatrixToContainer('arch-target-top', archState.targetViews.top);
+
+            activeCubes.clear();
+            rebuild3DCubes();
+            renderArchitectLevelDots();
+            setCameraPreset('iso');
+        }
+
+        function showArchitectHint() {
+            const levelData = ARCHITECT_LEVELS[archState.level - 1];
+            hintHighlightCubes = new Set(levelData.cubes);
+            rebuild3DCubes();
+            playTone('pop');
+            showToast('İpucu: Hedef küp konumları 3B sahnede turuncu gölgeyle gösterildi!', '💡', 'bg-amber-600');
+        }
+
+        function updateArchitectLiveStatus(userViews) {
+            if (!archState.targetViews) return;
+            const fOk = matricesEqual(userViews.front, archState.targetViews.front);
+            const rOk = matricesEqual(userViews.right, archState.targetViews.right);
+            const tOk = matricesEqual(userViews.top, archState.targetViews.top);
+
+            document.getElementById('arch-status-front').innerHTML = fOk ? '<span class="text-emerald-600">Ön ✅</span>' : 'Ön ⏳';
+            document.getElementById('arch-status-right').innerHTML = rOk ? '<span class="text-emerald-600">Sağ ✅</span>' : 'Sağ ⏳';
+            document.getElementById('arch-status-top').innerHTML = tOk ? '<span class="text-emerald-600">Üst ✅</span>' : 'Üst ⏳';
+        }
+
+        function checkArchitectSolution() {
+            const levelData = ARCHITECT_LEVELS[archState.level - 1];
+            const userViews = computeViews(activeCubes);
+            const fOk = matricesEqual(userViews.front, archState.targetViews.front);
+            const rOk = matricesEqual(userViews.right, archState.targetViews.right);
+            const tOk = matricesEqual(userViews.top, archState.targetViews.top);
+
+            const fb = document.getElementById('arch-feedback');
+            fb.classList.remove('hidden');
+
+            if (fOk && rOk && tOk) {
+                if (levelData.constraint) {
+                    const c = levelData.constraint;
+                    if (c.type === 'min' && activeCubes.size > c.count) {
+                        playTone('error');
+                        fb.className = 'p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold animate-pop';
+                        fb.innerHTML = `⚠️ Görünümler doğru ancak <strong>${activeCubes.size} küp</strong> kullandın! Bu bonus görevde gereksiz küpleri çıkararak <strong>en az ${c.count} küp</strong> ile aynı görünümleri elde etmelisin.`;
+                        return;
+                    }
+                    if (c.type === 'max' && activeCubes.size < c.count) {
+                        playTone('error');
+                        fb.className = 'p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold animate-pop';
+                        fb.innerHTML = `⚠️ Görünümler doğru ancak <strong>${activeCubes.size} küp</strong> kullandın! Görünümleri bozmadan gizli bölmeleri de doldurarak <strong>en çok ${c.count} küp</strong> yerleştirmelisin.`;
+                        return;
+                    }
+                }
+
+                playTone('fanfare');
+                if (!archState.completed.has(archState.level)) {
+                    addScore(25);
+                    archState.completed.add(archState.level);
+                }
+                renderArchitectLevelDots();
+                fb.className = 'p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex flex-col gap-2 animate-pop';
+
+                if (archState.level < ARCHITECT_LEVELS.length) {
+                    fb.innerHTML = `<div>🏆 <strong>Mükemmel Mimarlık! +25 Puan!</strong> Yapı tüm görünümlerle eşleşti.</div>
+                        <button onclick="loadArchitectLevel(${archState.level + 1})" class="min-h-[42px] w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm transition">Sonraki Seviye (${archState.level + 1}/12) ➔</button>`;
+                } else {
+                    fb.innerHTML = `<div>👑 <strong>Tebrikler!</strong> 12 seviyenin tamamını başarıyla inşa ettin!</div>`;
+                    showBadgeModal('Baş Mimar Unvanı Kazandın!', '12 zorlu mimari görevi ve en az/en çok küp bulmacalarını tamamladın.', 'Baş Mimar 🏗️');
+                }
+            } else {
+                playTone('error');
+                const missing = [];
+                if (!fOk) missing.push('Önden');
+                if (!rOk) missing.push('Sağdan');
+                if (!tOk) missing.push('Üstten');
+                fb.className = 'p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-semibold animate-pop';
+                fb.innerHTML = `⚠️ Henüz eşleşmedi. <strong>${missing.join(', ')}</strong> görünüm(ler)i hedefle uyuşmuyor.`;
+            }
+        }
+
+        // ==========================================
+        // 9. MODÜL 4: DEDEKTİF MODU
+        // ==========================================
+        let detState = { qNum: 1, maxQ: 10, targetDir: 'front', answered: false };
+
+        function startDetectiveMode() {
+            detState.qNum = 1;
+            loadDetectiveCase();
+        }
+
+        function loadDetectiveCase() {
+            detState.answered = false;
+            document.getElementById('det-q-num').textContent = detState.qNum;
+            document.getElementById('det-feedback').classList.add('hidden');
+
+            let views, dir;
+            let tries = 0;
+            do {
+                tries++;
+                activeCubes = generateRandomStructure(8, 4);
+                views = computeViews(activeCubes);
+                const dirs = ['front', 'right', 'left', 'back', 'top'];
+                dir = dirs[Math.floor(Math.random() * dirs.length)];
+                const others = dirs.filter(d => d !== dir).map(d => views[d]);
+                if (!others.some(o => matricesEqual(o, views[dir]))) break;
+            } while (tries < 20);
+
+            detState.targetDir = dir;
+            rebuild3DCubes();
+            setCameraPreset('iso');
+            renderMatrixToContainer('det-clue-grid', views[dir]);
+
+            document.querySelectorAll('.det-btn').forEach(b => {
+                b.disabled = false;
+                b.classList.remove('ring-4', 'ring-emerald-400', 'ring-rose-400', 'opacity-50');
+            });
+        }
+
+        function checkDetectiveGuess(guessDir, btn) {
+            if (detState.answered) return;
+            detState.answered = true;
+            setCameraPreset(detState.targetDir);
+
+            const fb = document.getElementById('det-feedback');
+            const fbText = document.getElementById('det-feedback-text');
+            fb.classList.remove('hidden');
+
+            if (guessDir === detState.targetDir) {
+                btn.classList.add('ring-4', 'ring-emerald-400');
+                addScore(15);
+                playTone('success');
+                fb.className = 'p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 text-xs sm:text-sm font-medium flex flex-col gap-2 animate-pop';
+                fbText.innerHTML = `🕵️‍♂️ <strong>Doğru Tespit! +15 Puan!</strong> Kamera <strong>${DIR_META[detState.targetDir].label}</strong> bakış açısına uçtu ve şeklin birebir örtüştüğünü kanıtladı.`;
+            } else {
+                btn.classList.add('ring-4', 'ring-rose-400');
+                playTone('error');
+                fb.className = 'p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-900 text-xs sm:text-sm font-medium flex flex-col gap-2 animate-pop';
+                fbText.innerHTML = `🔍 <strong>Yanlış Yön!</strong> Bu görünüm <strong>${DIR_META[detState.targetDir].label}</strong> bakıldığında oluşur. Sol ekranda kamerayı o açıya getirdik!`;
+            }
+        }
+
+        function nextDetectiveCase() {
+            if (detState.qNum >= detState.maxQ) {
+                showBadgeModal('Baş Dedektif Rozeti!', '10 gizemli bakış açısı vakasını başarıyla çözdün!', 'Uzay Dedektifi 🕵️');
+                detState.qNum = 1;
+            } else {
+                detState.qNum++;
+            }
+            loadDetectiveCase();
+        }
+
+        // ==========================================
+        // 10. MODÜL 5: GÖLGE & KAT PLANI BULMACASI
+        // ==========================================
+        let matPuzzleState = {
+            subMode: 'write_mat',
+            round: 1,
+            userMat: Array.from({ length: 4 }, () => Array(4).fill(0)),
+            targetMat: null,
+            bTargetDir: 'front',
+            bUserGrid: Array.from({ length: 4 }, () => Array(4).fill(false)),
+            bTargetGrid: null
+        };
+
+        function initMatPuzzleModule() {
+            setMatSubMode(matPuzzleState.subMode);
+        }
+
+        function setMatSubMode(sub) {
+            matPuzzleState.subMode = sub;
+            const btnA = document.getElementById('mat-sub-a');
+            const btnB = document.getElementById('mat-sub-b');
+            if (sub === 'write_mat') {
+                btnA.className = 'min-h-[40px] py-1.5 px-2 rounded-lg bg-white text-indigo-700 font-bold text-xs shadow-xs transition';
+                btnB.className = 'min-h-[40px] py-1.5 px-2 rounded-lg text-slate-600 font-semibold text-xs transition';
+                document.getElementById('mat-mode-a').classList.remove('hidden');
+                document.getElementById('mat-mode-b').classList.add('hidden');
+            } else {
+                btnB.className = 'min-h-[40px] py-1.5 px-2 rounded-lg bg-white text-indigo-700 font-bold text-xs shadow-xs transition';
+                btnA.className = 'min-h-[40px] py-1.5 px-2 rounded-lg text-slate-600 font-semibold text-xs transition';
+                document.getElementById('mat-mode-b').classList.remove('hidden');
+                document.getElementById('mat-mode-b').classList.add('flex');
+                document.getElementById('mat-mode-a').classList.add('hidden');
+            }
+            nextMatPuzzle();
+        }
+
+        function nextMatPuzzle() {
+            document.getElementById('mat-feedback').classList.add('hidden');
+            document.getElementById('mat-round').textContent = matPuzzleState.round;
+
+            activeCubes = generateRandomStructure(8, 4);
+            rebuild3DCubes();
+            setCameraPreset('iso');
+            const views = computeViews(activeCubes);
+            matPuzzleState.targetMat = views.matCounts;
+
+            if (matPuzzleState.subMode === 'write_mat') {
+                matPuzzleState.userMat = Array.from({ length: 4 }, () => Array(4).fill(0));
+                renderMatInputGrid();
+            } else {
+                matPuzzleState.bTargetDir = Math.random() > 0.5 ? 'front' : 'right';
+                matPuzzleState.bTargetGrid = views[matPuzzleState.bTargetDir];
+                matPuzzleState.bUserGrid = Array.from({ length: 4 }, () => Array(4).fill(false));
+
+                const labelTr = matPuzzleState.bTargetDir === 'front' ? 'ÖNDEN' : 'SAĞDAN';
+                document.getElementById('mat-b-target-label').textContent = labelTr;
+                document.getElementById('mat-b-draw-title').textContent = `${labelTr} Görünümü Boya`;
+
+                const givenEl = document.getElementById('mat-b-given-grid');
+                givenEl.innerHTML = '';
+                for (let r = 0; r < 4; r++) {
+                    for (let c = 0; c < 4; c++) {
+                        const val = views.matCounts[r][c];
+                        const cell = document.createElement('div');
+                        cell.className = `rounded border flex items-center justify-center text-xs font-bold ${
+                            val > 0 ? 'bg-sky-600 text-white border-sky-800' : 'bg-slate-100 text-slate-400 border-slate-200'
+                        }`;
+                        cell.textContent = val;
+                        givenEl.appendChild(cell);
+                    }
+                }
+                renderMatBDrawGrid();
+            }
+        }
+
+        function renderMatInputGrid() {
+            const el = document.getElementById('mat-input-grid');
+            el.innerHTML = '';
+            for (let r = 0; r < 4; r++) {
+                for (let c = 0; c < 4; c++) {
+                    const val = matPuzzleState.userMat[r][c];
+                    const btn = document.createElement('button');
+                    btn.className = `rounded-xl border-2 font-display font-bold text-lg transition active:scale-95 ${
+                        val > 0 ? 'bg-indigo-600 text-white border-indigo-800 shadow-xs' : 'bg-white text-slate-400 border-slate-300 hover:border-indigo-400'
+                    }`;
+                    btn.textContent = val;
+                    btn.onclick = () => {
+                        matPuzzleState.userMat[r][c] = (matPuzzleState.userMat[r][c] + 1) % 5;
+                        playTone('pop');
+                        renderMatInputGrid();
+                    };
+                    el.appendChild(btn);
+                }
+            }
+        }
+
+        function checkMatModeA() {
+            let allMatch = true;
+            for (let r = 0; r < 4; r++) {
+                for (let c = 0; c < 4; c++) {
+                    if (matPuzzleState.userMat[r][c] !== matPuzzleState.targetMat[r][c]) allMatch = false;
+                }
+            }
+            const fb = document.getElementById('mat-feedback');
+            const fbText = document.getElementById('mat-feedback-text');
+            fb.classList.remove('hidden');
+
+            if (allMatch) {
+                playTone('success');
+                addScore(20);
+                matPuzzleState.round++;
+                setCameraPreset('top');
+                fb.className = 'p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 text-xs sm:text-sm font-semibold flex flex-col gap-2 animate-pop';
+                fbText.innerHTML = `🎉 <strong>Tebrikler! +20 Puan!</strong> Üstten kat planındaki tüm yükseklik sayılarını eksiksiz yazdın.`;
+            } else {
+                playTone('error');
+                fb.className = 'p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-900 text-xs sm:text-sm font-semibold flex flex-col gap-2 animate-pop';
+                fbText.innerHTML = `⚠️ Bazı karelerdeki küp sayıları uyuşmuyor. Boş kareler <strong>0</strong>, tek katlılar <strong>1</strong> olmalıdır. 3B modeli döndürüp tekrar kontrol et!`;
+            }
+        }
+
+        function renderMatBDrawGrid() {
+            const el = document.getElementById('mat-b-draw-grid');
+            el.innerHTML = '';
+            for (let r = 0; r < 4; r++) {
+                for (let c = 0; c < 4; c++) {
+                    const active = matPuzzleState.bUserGrid[r][c];
+                    const btn = document.createElement('button');
+                    btn.className = `rounded border transition ${active ? 'grid-cell-filled' : 'grid-cell-empty hover:border-indigo-400'}`;
+                    btn.onclick = () => {
+                        matPuzzleState.bUserGrid[r][c] = !matPuzzleState.bUserGrid[r][c];
+                        playTone('pop');
+                        renderMatBDrawGrid();
+                    };
+                    el.appendChild(btn);
+                }
+            }
+        }
+
+        function checkMatModeB() {
+            const isOk = matricesEqual(matPuzzleState.bUserGrid, matPuzzleState.bTargetGrid);
+            const fb = document.getElementById('mat-feedback');
+            const fbText = document.getElementById('mat-feedback-text');
+            fb.classList.remove('hidden');
+
+            if (isOk) {
+                playTone('success');
+                addScore(20);
+                matPuzzleState.round++;
+                setCameraPreset(matPuzzleState.bTargetDir);
+                fb.className = 'p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 text-xs sm:text-sm font-semibold flex flex-col gap-2 animate-pop';
+                fbText.innerHTML = `🎨 <strong>Harika Çizim! +20 Puan!</strong> Kat planındaki en büyük sayılara bakarak 2B görünümü doğru boyadın.`;
+            } else {
+                playTone('error');
+                fb.className = 'p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-900 text-xs sm:text-sm font-semibold flex flex-col gap-2 animate-pop';
+                fbText.innerHTML = `⚠️ Boyadığın kareler hedef görünümle eşleşmiyor. İpucu: Önden bakarken her sütundaki <strong>en büyük sayı</strong> kadar kareyi en alttan yukarı doğru boyamalısın!`;
+            }
+        }
+
+        // ==========================================
+        // 11. MODÜL 6: KAZANIM TESTİ & KARNE (12 SORU)
+        // ==========================================
+        const QUIZ_QUESTIONS = [
+            {
+                kazanim: 'M.7.3.3.1',
+                q: 'Yandaki birim küplerden oluşan yapının ÜSTTEN görünümünde toplam kaç birim kare görülür?',
+                visualType: 'mat',
+                matData: [[2,1,0,0],[3,1,0,0],[1,0,0,0],[0,0,0,0]],
+                options: ['4 birim kare', '5 birim kare', '8 birim kare', '9 birim kare'],
+                correct: 1,
+                exp: 'Üstten bakışta yükseklikler (kat sayıları) değil, zeminde dolu olan sütun sayısı görülür. 0 dışındaki 5 hücre dolu olduğu için 5 birim kare görülür.'
+            },
+            {
+                kazanim: 'M.7.3.3.1',
+                q: 'Bir yapının ÖNDEN görünümü ile ARKADAN görünümü arasındaki geometrik ilişki aşağıdakilerden hangisidir?',
+                visualType: 'symmetry',
+                options: ['Tamamen aynıdır', 'Yatay eksende simetriktir (ayna görüntüsü)', 'Dikey eksende ters dönmüştür', 'Hiçbir ilişkisi yoktur'],
+                correct: 1,
+                exp: 'Bir cisme önden ve arkadan bakıldığında sağdaki sütun sola, soldaki sütun sağa geçer; yani iki görünüm yatayda birbirinin simetriğidir.'
+            },
+            {
+                kazanim: 'M.7.3.3.2',
+                q: 'Üstten kat planı yanda verilen yapıda toplam kaç adet birim küp kullanılmıştır?',
+                visualType: 'mat',
+                matData: [[3,2,1,0],[2,1,0,0],[1,0,0,0],[0,0,0,0]],
+                options: ['6 birim küp', '8 birim küp', '10 birim küp', '12 birim küp'],
+                correct: 2,
+                exp: 'Kat planındaki sayıların toplamı toplam birim küp sayısını verir: 3 + 2 + 1 + 2 + 1 + 1 = 10 birim küp.'
+            },
+            {
+                kazanim: 'M.7.3.3.2',
+                q: 'Yandaki kat planına sahip yapının ÖNDEN (alt kenardan) görünümünde en sol sütunda kaç kare üst üste görünür?',
+                visualType: 'mat',
+                matData: [[4,1,0,0],[2,3,0,0],[1,2,0,0],[0,0,0,0]],
+                options: ['1 kare', '2 kare', '3 kare', '4 kare'],
+                correct: 3,
+                exp: 'Önden bakarken en sol sütundaki sayılar (4, 2, 1) arasından EN BÜYÜK olanı (4) görünür.'
+            },
+            {
+                kazanim: 'M.7.3.3.1',
+                q: 'Bir yapının SAĞDAN görünümü verilmişse, SOLDAN görünümünü bulmak için ne yapılmalıdır?',
+                visualType: 'symmetry',
+                options: ['Görünümü sağdan sola (yatay) ters çevirmeliyiz', 'Görünümü baş aşağı çevirmeliyiz', 'En üst sırayı silmeliyiz', 'Aynen bırakmalıyız'],
+                correct: 0,
+                exp: 'Sağdan ve soldan görünümler birbirinin yatay simetriğidir. Sağdan görünümü yatayda ters çevirerek soldan görünümü elde ederiz.'
+            },
+            {
+                kazanim: 'M.7.3.3.2',
+                q: 'Yandaki kat planına sahip yapıdan hangi sütundaki küpler çıkarılırsa yapının ÖNDEN görünümü DEĞİŞMEZ?',
+                visualType: 'mat',
+                matData: [[3,2,0,0],[1,2,0,0],[0,0,0,0],[0,0,0,0]],
+                options: ['1. sütun en üstteki (3 katlı)', '1. sütun alttaki (1 katlı)', '2. sütun üstteki (2 katlı)', 'Hiçbiri çıkarılamaz'],
+                correct: 1,
+                exp: '1. sütunda arkada 3 katlı kule varken önündeki 1 katlı küp önden bakışta arkadaki kulenin önünde kalır; çıkarılsa bile arkadaki 3 katlı kule görünmeye devam eder.'
+            },
+            {
+                kazanim: 'M.7.3.3.1',
+                q: 'Aşağıdaki geometrik cisimlerden hangisinin ÖNDEN, SAĞDAN ve ÜSTTEN görünümlerinin tamamı birbirine eşittir?',
+                visualType: 'shapes',
+                options: ['Dikdörtgenler prizması', 'Kare dik piramit', 'Küp ve Küre', 'Silindir'],
+                correct: 2,
+                exp: 'Küpün tüm yönlerden görünümü eş kareler, kürenin ise tüm yönlerden görünümü eş dairelerdir.'
+            },
+            {
+                kazanim: 'M.7.3.3.2',
+                q: 'Üstten görünümü 2×2 kare (4 kare dolu), Önden görünümü 2 katlı (2×2 kare) olan bir yapıda EN AZ kaç birim küp vardır?',
+                visualType: 'mincube',
+                options: ['4 birim küp', '5 birim küp', '6 birim küp', '8 birim küp'],
+                correct: 2,
+                exp: 'Tabanda 4 kare dolu olduğu için en az 4 küp tabana konur. Önden görünümün 2 katlı olması için iki farklı sütuna 1’er küp daha eklenir: 4 + 2 = 6 küp.'
+            },
+            {
+                kazanim: 'M.7.3.3.2',
+                q: 'Üstten görünümü 2×2 kare ve Önden görünümü 2×2 kare olan aynı yapıda EN ÇOK kaç birim küp bulunabilir?',
+                visualType: 'mincube',
+                options: ['6 birim küp', '7 birim küp', '8 birim küp', '10 birim küp'],
+                correct: 2,
+                exp: 'Tabandaki 4 karenin tamamı 2 kat yüksekliğinde doldurulursa 4 × 2 = 8 birim küp elde edilir.'
+            },
+            {
+                kazanim: 'M.7.3.3.1',
+                q: 'Yandaki kat planına sahip yapının SAĞDAN görünümünde en soldaki sütunun yüksekliği kaç birimdir?',
+                visualType: 'mat',
+                matData: [[1,2,0,0],[1,1,0,0],[0,3,0,0],[0,0,0,0]],
+                options: ['1 birim', '2 birim', '3 birim', '4 birim'],
+                correct: 2,
+                exp: 'Sağdan bakıldığında ön taraf (en alt satır: 0, 3, 0, 0) en solda görünür. Bu satırdaki en büyük sayı 3 olduğu için yükseklik 3 birimdir.'
+            },
+            {
+                kazanim: 'M.7.3.3.1',
+                q: 'Bir silindirin tabanına paralel (ÜSTTEN) ve yan yüzeyine dik (ÖNDEN) görünümleri sırasıyla hangi geometrik şekillerdir?',
+                visualType: 'shapes',
+                options: ['Daire ve Üçgen', 'Daire ve Dikdörtgen', 'Kare ve Daire', 'Dikdörtgen ve Daire'],
+                correct: 1,
+                exp: 'Dik dairesel silindire üstten bakıldığında daire, önden (yandan) bakıldığında ise dikdörtgen görünür.'
+            },
+            {
+                kazanim: 'M.7.3.3.2',
+                q: 'Yandaki kat planına sahip yapıya hangi boş kareye 1 küp eklenirse ÜSTTEN görünüm değişirken ÖNDEN görünüm DEĞİŞMEZ?',
+                visualType: 'mat',
+                matData: [[2,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]],
+                options: ['1. sütundaki boş karelerden birine', '2. sütundaki boş karelerden birine', '3. sütundaki boş karelerden birine', '4. sütundaki boş karelerden birine'],
+                correct: 0,
+                exp: '1. sütunda zaten 2 katlı küp olduğu için aynı sütundaki boş bir taban karesine 1 küp eklemek üstten görünümü değiştirir ama önden görünümü değiştirmez.'
+            }
+        ];
+
+        let quizState = {
+            currentIdx: 0,
+            answers: Array(QUIZ_QUESTIONS.length).fill(null)
+        };
+
+        function initQuizModule() {
+            renderQuizDots();
+            renderQuizQuestion();
+        }
+
+        function renderQuizDots() {
+            const container = document.getElementById('quiz-dots');
+            container.innerHTML = '';
+            QUIZ_QUESTIONS.forEach((_, idx) => {
+                const ans = quizState.answers[idx];
+                const btn = document.createElement('button');
+                let style = 'bg-slate-100 text-slate-600 border-slate-200';
+                if (idx === quizState.currentIdx) style = 'bg-indigo-600 text-white border-indigo-700 ring-2 ring-indigo-300';
+                else if (ans) style = ans.isCorrect ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-rose-500 text-white border-rose-600';
+
+                btn.className = `h-8 rounded-lg border text-xs font-bold transition ${style}`;
+                btn.textContent = idx + 1;
+                btn.onclick = () => {
+                    quizState.currentIdx = idx;
+                    renderQuizDots();
+                    renderQuizQuestion();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function renderQuizVisual(qObj) {
+            const box = document.getElementById('quiz-visual-box');
+            box.innerHTML = '';
+
+            if (qObj.visualType === 'mat') {
+                const title = document.createElement('div');
+                title.className = 'text-[11px] font-bold text-slate-500 mb-1.5';
+                title.textContent = 'Üstten Kat Planı (Mat Kodu)';
+                box.appendChild(title);
+
+                const grid = document.createElement('div');
+                grid.className = 'grid grid-cols-4 gap-1 w-36 h-36 bg-white p-1.5 rounded-xl border-2 border-slate-300 shadow-xs';
+                for (let r = 0; r < 4; r++) {
+                    for (let c = 0; c < 4; c++) {
+                        const val = qObj.matData[r][c];
+                        const cell = document.createElement('div');
+                        cell.className = `rounded flex items-center justify-center font-display font-bold text-sm border ${
+                            val > 0 ? 'bg-indigo-600 text-white border-indigo-800' : 'bg-slate-100 text-slate-400 border-slate-200'
+                        }`;
+                        cell.textContent = val;
+                        grid.appendChild(cell);
+                    }
+                }
+                box.appendChild(grid);
+
+                const foot = document.createElement('div');
+                foot.className = 'text-[11px] font-bold text-rose-600 mt-1.5';
+                foot.textContent = '▲ Ön Taraf';
+                box.appendChild(foot);
+            } else {
+                box.innerHTML = `
+                    <svg class="w-36 h-36 text-indigo-600" viewBox="0 0 120 120" fill="none">
+                        <rect x="15" y="15" width="90" height="90" rx="16" fill="#eef2ff" stroke="#c7d2fe" stroke-width="2"/>
+                        <polygon points="60,28 92,46 92,82 60,100 28,82 28,46" fill="#4f46e5" fill-opacity="0.18" stroke="#4f46e5" stroke-width="2.5"/>
+                        <polyline points="28,46 60,64 92,46" stroke="#4f46e5" stroke-width="2.5"/>
+                        <line x1="60" y1="64" x2="60" y2="100" stroke="#4f46e5" stroke-width="2.5"/>
+                        <text x="60" y="22" text-anchor="middle" font-size="9" font-weight="bold" fill="#3730a3">3B UZAMSAL ANALİZ</text>
+                    </svg>
+                `;
+            }
+        }
+
+        function renderQuizQuestion() {
+            document.getElementById('quiz-question-area').classList.remove('hidden');
+            document.getElementById('quiz-report-card').classList.add('hidden');
+
+            const idx = quizState.currentIdx;
+            const qObj = QUIZ_QUESTIONS[idx];
+            const userAns = quizState.answers[idx];
+
+            document.getElementById('quiz-progress-badge').textContent = `Soru ${idx + 1} / ${QUIZ_QUESTIONS.length}`;
+            document.getElementById('quiz-kazanim-tag').textContent = `Kazanım: ${qObj.kazanim}`;
+            document.getElementById('quiz-question-text').textContent = `${idx + 1}. ${qObj.q}`;
+            renderQuizVisual(qObj);
+
+            const optsEl = document.getElementById('quiz-options-list');
+            optsEl.innerHTML = '';
+            const letters = ['A', 'B', 'C', 'D'];
+
+            qObj.options.forEach((optText, oIdx) => {
+                const btn = document.createElement('button');
+                let btnStyle = 'bg-slate-50 hover:bg-indigo-50 border-slate-200 text-slate-800';
+                if (userAns !== null) {
+                    if (oIdx === qObj.correct) btnStyle = 'bg-emerald-50 border-emerald-500 text-emerald-900 font-bold';
+                    else if (oIdx === userAns.selected) btnStyle = 'bg-rose-50 border-rose-500 text-rose-900';
+                    else btnStyle = 'bg-slate-50 border-slate-200 text-slate-400';
+                }
+
+                btn.className = `min-h-[46px] w-full text-left p-3 rounded-xl border-2 text-xs sm:text-sm font-medium flex items-center gap-3 transition ${btnStyle}`;
+                btn.innerHTML = `<span class="w-7 h-7 rounded-lg bg-white border border-slate-300 flex items-center justify-center font-bold text-xs shrink-0">${letters[oIdx]}</span> <span>${optText}</span>`;
+                btn.onclick = () => selectQuizAnswer(oIdx);
+                optsEl.appendChild(btn);
+            });
+
+            const expBox = document.getElementById('quiz-explanation-box');
+            if (userAns !== null) {
+                expBox.classList.remove('hidden');
+                expBox.className = `p-4 rounded-2xl border text-xs sm:text-sm leading-relaxed flex flex-col gap-3 animate-pop ${
+                    userAns.isCorrect ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950' : 'bg-rose-50/80 border-rose-200 text-rose-950'
+                }`;
+                document.getElementById('quiz-explanation-text').innerHTML = `<strong>${userAns.isCorrect ? '✅ Doğru Cevap!' : '❌ Yanlış Cevap!'}</strong> ${qObj.exp}`;
+                document.getElementById('quiz-next-btn').textContent = idx === QUIZ_QUESTIONS.length - 1 ? 'Karneyi Görüntüle 🎓' : 'Sonraki Soru ➔';
+            } else {
+                expBox.classList.add('hidden');
+            }
+        }
+
+        function selectQuizAnswer(oIdx) {
+            const idx = quizState.currentIdx;
+            if (quizState.answers[idx] !== null) return;
+
+            const isCorrect = oIdx === QUIZ_QUESTIONS[idx].correct;
+            quizState.answers[idx] = { selected: oIdx, isCorrect };
+
+            if (isCorrect) {
+                playTone('success');
+                addScore(15);
+            } else {
+                playTone('error');
+            }
+            renderQuizDots();
+            renderQuizQuestion();
+        }
+
+        function nextQuizQuestion() {
+            if (quizState.currentIdx < QUIZ_QUESTIONS.length - 1) {
+                quizState.currentIdx++;
+                renderQuizDots();
+                renderQuizQuestion();
+            } else {
+                showQuizReportCard();
+            }
+        }
+
+        function showQuizReportCard() {
+            document.getElementById('quiz-question-area').classList.add('hidden');
+            document.getElementById('quiz-report-card').classList.remove('hidden');
+
+            let correctCount = 0, k1Correct = 0, k1Total = 0, k2Correct = 0, k2Total = 0;
+            QUIZ_QUESTIONS.forEach((q, idx) => {
+                const ans = quizState.answers[idx];
+                const ok = ans && ans.isCorrect;
+                if (ok) correctCount++;
+                if (q.kazanim === 'M.7.3.3.1') { k1Total++; if (ok) k1Correct++; }
+                else { k2Total++; if (ok) k2Correct++; }
+            });
+
+            const wrongCount = QUIZ_QUESTIONS.length - correctCount;
+            const percent = Math.round((correctCount / QUIZ_QUESTIONS.length) * 100);
+
+            document.getElementById('rep-correct').textContent = correctCount;
+            document.getElementById('rep-wrong').textContent = wrongCount;
+            document.getElementById('rep-percent').textContent = `%${percent}`;
+
+            document.getElementById('rep-k1-text').textContent = `${k1Correct}/${k1Total}`;
+            document.getElementById('rep-k1-bar').style.width = `${(k1Correct / k1Total) * 100}%`;
+
+            document.getElementById('rep-k2-text').textContent = `${k2Correct}/${k2Total}`;
+            document.getElementById('rep-k2-bar').style.width = `${(k2Correct / k2Total) * 100}%`;
+
+            playTone('fanfare');
+        }
+
+        function restartQuiz() {
+            quizState.currentIdx = 0;
+            quizState.answers = Array(QUIZ_QUESTIONS.length).fill(null);
+            initQuizModule();
+        }
+
+        // ==========================================
+        // 12. YARDIMCI FONKSİYONLAR & RENDER DÖNGÜSÜ
+        // ==========================================
+        function addScore(pts) {
+            globalScore += pts;
+            document.getElementById('global-score').textContent = globalScore;
+        }
+
+        let toastTimeout = null;
+        function showToast(msg, icon = '✨', bgClass = 'bg-slate-800') {
+            const banner = document.getElementById('toast-banner');
+            document.getElementById('toast-text').textContent = msg;
+            document.getElementById('toast-icon').textContent = icon;
+            banner.className = `fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl font-semibold text-sm sm:text-base text-white flex items-center gap-2 transition-all ${bgClass}`;
+            banner.classList.remove('hidden');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => banner.classList.add('hidden'), 3000);
+        }
+
+        function showBadgeModal(title, desc, rank) {
+            document.getElementById('badge-title').textContent = title;
+            document.getElementById('badge-desc').textContent = desc;
+            document.getElementById('badge-score').textContent = globalScore;
+            document.getElementById('badge-rank').textContent = rank;
+            document.getElementById('badge-modal').classList.remove('hidden');
+        }
+
+        function closeBadgeModal() {
+            document.getElementById('badge-modal').classList.add('hidden');
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-wrapper');
+            if (!container || !renderer || !camera) return;
+            const width = container.clientWidth || 640;
+            const height = container.clientHeight || 480;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height, false);
+            renderer.render(scene, camera);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (renderer && scene && camera) {
+                updateCameraPosition(false);
+                renderer.render(scene, camera);
+            }
+        }
+
+        window.onload = function () {
+            initAnnotationCanvas();
+            initThreeJS();
+            loadPreset('stairs');
+            onWindowResize();
+            animate();
+        };
+    </script>
+</body>
+</html>
